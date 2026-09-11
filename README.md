@@ -1,94 +1,164 @@
-# Solari Cookbook
+# Doen Thang
 
-Short, runnable examples for [Solari](https://getsolari.com) — cloud browsers,
-sandboxes, and desktops behind one API key.
+A travel document that fills itself from what locals actually say — built on a
+domain-agnostic service layer for **situated observation**: seeing the internet the way a
+specific kind of person in a specific place sees it, repeatedly, at scale, and turning
+that into structured evidence.
 
-Every example in this repo is a complete program you can run in under a minute.
-They are deliberately small: one idea each, no framework, no scaffolding to read
-past. Copy one into your project and change the parts you care about.
+Two things live in this repository, and the boundary between them is enforced rather
+than intended:
 
-## Examples
-
-### Cloud browser
-
-| Example | Language | What it shows |
+| Scope | What it is | Knows about travel? |
 | --- | --- | --- |
-| [browser-quickstart-ts](examples/browser-quickstart-ts) | TypeScript | Launch a browser, open a page, read it |
-| [browser-quickstart-py](examples/browser-quickstart-py) | Python | Launch a browser, open a page, read it |
-| [browser-stealth-proxy-ts](examples/browser-stealth-proxy-ts) | TypeScript | Stealth mode + residential proxy egress |
-| [browser-profiles-ts](examples/browser-profiles-ts) | TypeScript | Log in once, reuse the session forever |
-| [browser-session-recording-py](examples/browser-session-recording-py) | Python | Record a session, download the replay |
+| `@samsara/*` | The service layer. Personas, sessions, budgets, harvesting, extraction. Runs on [Solari](https://getsolari.com). | **No.** Mechanically checked. |
+| `@dt/*` | Doen Thang, the first vertical. Places, trips, postcards, the document. | Yes. That is its job. |
 
-### Sandbox
+The service layer is called Samsara. It is not a travel product with the travel parts
+factored out — it is a general primitive that travel happens to be the first buyer of.
+Algorithm auditing, geo-pricing intelligence, localised SERP monitoring and in-language
+market research are the same machinery pointed somewhere else.
 
-| Example | Language | What it shows |
-| --- | --- | --- |
-| [sandbox-quickstart-ts](examples/sandbox-quickstart-ts) | TypeScript | Run a command, write and read files |
-| [sandbox-code-interpreter-py](examples/sandbox-code-interpreter-py) | Python | Stateful Python kernel for agent loops |
-| [sandbox-port-preview-ts](examples/sandbox-port-preview-ts) | TypeScript | Expose a server in the VM on a public URL |
+> **Status:** Phase 0, in progress. The kernel runs and opens real browser sessions.
+> There is no product yet. See [`docs/STATUS.md`](docs/STATUS.md) for exactly where
+> things stand and [`docs/PLAN.md`](docs/PLAN.md) for where they are going.
 
-### Desktop
+## The idea
 
-| Example | Language | What it shows |
-| --- | --- | --- |
-| [desktop-computer-use-py](examples/desktop-computer-use-py) | Python | Screenshot, click, and type on a Linux GUI |
+Ask Google for "best things to do in Bangkok" and you get the same nine temples everyone
+else gets, because you are asking as a tourist from wherever you are sitting. The
+interesting content — the noodle shop with forty reviews all in Thai, the market that
+locals post about and guidebooks do not — is served to people the platform thinks are
+local, and never surfaces for you.
 
-## Running an example
+So we ask as somebody else. A **persona** is a browsing viewpoint: a language, a clock, a
+set of stored preferences, a warmed profile, an egress country. Point it at a public
+surface, read what comes back, and the difference between what two personas see is the
+product.
 
-Each directory is self-contained.
+### One thing we got wrong, and what it taught us
 
-```bash
-git clone https://github.com/solari-sdk/solari-cookbook.git
-cd solari-cookbook/examples/browser-quickstart-ts
+The obvious design is "proxy through the country you care about." It is mostly wrong.
+Platforms do not serve content *from* servers in your country; they rank it from a
+profile assembled out of signals, roughly in this order of weight:
 
-npm install                          # or: pip install -r requirements.txt
-export SOLARI_API_KEY=slr_live_...   # grab one at console.getsolari.com
-npm start                            # or: python main.py
+1. Account region — sticky from signup, does not follow your IP
+2. The language and script of the query
+3. Stored region preferences (`gl`/`hl`, content languages)
+4. Browser locale and timezone
+5. Engagement history on a warmed profile
+6. **The egress IP** — last, and the only one we cannot always buy
+
+A Thai IP asking in English gets the global viral feed. A `th-TH` browser on
+`Asia/Bangkok` asking in Thai does not — from anywhere. We found this the hard way when
+our provider turned out to have no Thai egress at all, and it made the architecture
+better: the viewpoint is a stack of signals, the IP is one ingredient, and every session
+records which signals were actually present so the results stay interpretable.
+
+Written up in [ADR-0015](docs/adr/0015-viewpoint-over-egress.md). Measuring the real
+weight of each signal is the first task of Phase 1, because the list above is an informed
+hypothesis, not a result.
+
+## Layout
+
+```
+packages/samsara/     the service layer — no travel vocabulary appears here
+  core/               Zod schemas for the engine entities
+  db/                 Drizzle tables for those entities
+  kernel/             every cloud session goes through here
+  personas/ sources/ harvest/ refine/ eyes/ llm/
+packages/travel/      @dt/* — the travel vertical
+  core/ db/ travel-pack/ ui/
+apps/
+  web/                React + Vite. The document.
+  api/                Hono. Thin: auth, rows, SSE.
+  worker/             Scheduled GitHub Actions job. The pipeline.
+docs/
+  PLAN.md             the whole plan, phase by phase
+  STATUS.md           where we actually are
+  adr/                0001–0015, why each decision was made
+examples/             upstream Solari cookbook, kept verbatim
 ```
 
-One `slr_live_` key works across browsers, sandboxes, and desktops, and every
-product bills to the same balance.
+## The kernel
 
-## Which product do I want?
+`@samsara/kernel` is the only way anything opens a cloud session. Not a convention — the
+seam check enforces it, and exactly one file in the repository imports the provider SDK.
 
-- **Cloud browser** — you need a *web page*: scraping, testing, filling forms,
-  anything Playwright or Puppeteer would do locally. Adds stealth, managed
-  proxies, captcha solving, profiles, and session recording.
-- **Sandbox** — you need to *run code*: an LLM's Python, an untrusted build, a
-  data job. A headless microVM that boots from a snapshot in about a second.
-- **Desktop** — you need a *screen*: computer-use agents, GUI apps, anything
-  that has to be clicked. A sandbox plus X11 and a live VNC stream.
+```ts
+const result = await kernel.withBrowser(
+  "harvest",
+  { country: "sg", locale: "th-TH", timezoneId: "Asia/Bangkok" },
+  async (page) => read(page),
+)
+```
 
-## Gotchas the examples encode
+That call, and everything like it, gets:
 
-Things that cost you an afternoon if you meet them cold:
+- **A budget refusal before anything opens.** Three meters — provider minutes, LLM tokens,
+  geocoding calls — expressed as counts rather than dollars, because rates drift and counts
+  do not. Exhausted means refused, by name. There is no soft mode.
+- **A hard deadline that force-closes.** The provider's own timeout is a rolling idle
+  window, so a page that never goes idle is never caught by it. A session nobody is
+  watching is a session somebody is still paying for.
+- **A failure that says whose fault it is.** `budget | blocked | timeout | upstream |
+  config | internal`. The `upstream`/`internal` split is the one that matters: it is how a
+  provider maintenance window stops looking like our bug. Only those two are retryable.
+- **Minutes metered from measurement, not estimate**, whether the operation succeeded
+  or not.
+- **Structured logs with nowhere to put a secret.** This repository is public, so its CI
+  log is public. The event type is a closed union with no free-form field anywhere —
+  logging a credential does not typecheck. A redaction denylist was the obvious design and
+  the wrong one; denylists leak by omission.
 
-- **TypeScript: `browser.close()` is enough to exit (as of `@solarisdk/browser`
-  0.1.3).** The client keeps a loopback proxy open for connection retries; before
-  0.1.3 that listener held Node's event loop open, so you had to
-  `await solari.close()` or the script printed its output and then hung forever.
-  0.1.3 unrefs the listener — `browser.close()` alone now exits. Calling
-  `solari.close()` is still fine and releases the client's pool immediately.
-- **Recording is per session, not per account.** Pass `recording: true` when you
-  create the session; without it the replay endpoint 404s forever. The upload is
-  async after release, so poll for ~30s before giving up.
-- **Sandbox commands are not shell-interpreted.** `run("ls -la")` looks for a
-  binary named `ls -la`. Put argv in `args`, or run `sh -c` explicitly.
-- **`kill()`, not `close()`, ends a VM.** `close()` drops your local control
-  channel; the VM keeps running until its idle timeout.
-- **`timeoutMs` is a rolling idle window**, not a hard deadline — it resets on
-  every use.
+## The seam
 
-## Links
+No travel vocabulary appears under `packages/samsara/**`. No `@samsara/*` package imports
+from `@dt/*`. No engine table carries a foreign key into a travel table.
 
-- Docs — [docs.getsolari.com](https://docs.getsolari.com)
-- Console — [console.getsolari.com](https://console.getsolari.com)
-- Changelog — [changelog.getsolari.com](https://changelog.getsolari.com)
-- Questions — [hello@getsolari.com](mailto:hello@getsolari.com)
+All three are checked, not trusted — the database one against a live Postgres, and the
+engine's own test fixtures are written around a made-up domain called `atlas` precisely so
+that nothing travel-shaped can quietly become load-bearing.
 
-## Contributing
+The point is cost, not purity: when there is a second vertical, or a buyer for the
+platform alone, `packages/samsara/` leaves as a `git filter-repo` rather than a rewrite.
 
-New examples are welcome. Keep them small, make them run end-to-end against the
-real API, and put anything surprising in a comment right where it bites.
+## Running it
 
-MIT licensed.
+Requires Node 22+, pnpm 11, and Docker.
+
+```bash
+pnpm install
+cp .env.example .env        # then fill in SOLARI_API_KEY
+pnpm db:up && pnpm db:migrate && pnpm db:seed
+pnpm check                  # lint, typecheck, test
+```
+
+`pnpm check` spends nothing and needs no API key: the kernel talks to
+`BrowserLauncher`/`SandboxLauncher` interfaces, and the tests supply fakes.
+
+One test does spend money, and it is skipped unless you ask for it:
+
+```bash
+pnpm --filter @samsara/kernel test:live
+```
+
+It opens one real browser session, reads its egress address, checks that the viewpoint
+reached the page, and closes. Costs about 0.06 browser-minutes. It stays visible as a
+*skipped* test in the normal run rather than being hidden behind a filename, because a
+live test nobody remembers exists is a live test nobody runs before shipping.
+
+## Cost
+
+The whole demo runs under a hard $20 ceiling, which is a constraint on the architecture
+rather than a note to act on later — it is why the budget guard exists in Phase 0 instead
+of Phase 8, and why ceilings are counts with their derivation rate in a comment. No price
+is hardcoded anywhere. [`docs/PLAN.md` §8](docs/PLAN.md) has the arithmetic.
+
+## Built on Solari
+
+[Solari](https://getsolari.com) supplies the cloud browsers, sandboxes, residential proxy
+egress, and profile storage. The `examples/` directory is their cookbook, kept verbatim.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
