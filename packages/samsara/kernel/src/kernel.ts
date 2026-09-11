@@ -1,0 +1,350 @@
+import { randomUUID } from "node:crypto"
+import type { SessionOutcome, SessionPurpose } from "@samsara/core"
+import type { BudgetGuard, SpendScope } from "./budget.js"
+import {
+  isSupportedProxyCountry,
+  NEAREST_AVAILABLE,
+  SUPPORTED_PROXY_COUNTRIES,
+} from "./countries.js"
+import { deadlineFor, withDeadline } from "./deadline.js"
+import { type Logger, now, silentLogger } from "./log.js"
+import type { BrowserLauncher, LaunchConfig, SandboxLauncher } from "./ports.js"
+import type { SessionRegistry } from "./registry.js"
+import { classify, err, type Failure, failure, ok, type Result } from "./result.js"
+import { withRetry } from "./retry.js"
+
+/**
+ * `withBrowser` and `withSandbox` (plan section 2.4).
+ *
+ * The contract worth stating plainly: **`fn` never receives a raw handle.** Every
+ * path through this file opens a session, registers it, races it against a hard
+ * deadline, closes it in a `finally`, and meters the minutes it consumed whether
+ * it succeeded or not. Anything that wants a browser gets one through here, which
+ * is what makes the minutes meter a measurement rather than an estimate.
+ */
+
+export interface BrowserOptions {
+  country: string
+  /**
+   * The viewpoint to present (see `Viewpoint` in `ports.ts`). Optional, and the
+   * default is worth naming: without it the session is `en-US` on UTC, which is a
+   * viewpoint too — just not one anybody asked for.
+   */
+  locale?: string
+  timezoneId?: string
+  geolocation?: { latitude: number; longitude: number; accuracy?: number }
+  personaId?: string | null
+  ownerId?: string | null
+  domainId?: string | null
+  /** Sticky egress IP, so one identity keeps one address across sessions. */
+  proxySession?: string
+  /** Provider-side persisted cookies and localStorage. */
+  profileId?: string
+  proxyTier?: "residential" | "mobile"
+  captcha?: boolean
+  /** On for the first runs of a new adapter, off by default (section 8). */
+  recording?: boolean
+  deadlineMs?: number
+  /** Attributes the spend to a run, enabling the `purpose.run` window. */
+  runId?: string
+  /** One try plus this many retries. Defaults to the section 2.4 policy. */
+  attempts?: number
+}
+
+export interface SandboxOptions {
+  template: string
+  ownerId?: string | null
+  domainId?: string | null
+  deadlineMs?: number
+  runId?: string
+  attempts?: number
+}
+
+export interface KernelDeps {
+  registry: SessionRegistry
+  guard: BudgetGuard
+  browser?: BrowserLauncher
+  sandbox?: SandboxLauncher
+  logger?: Logger
+  clock?: () => Date
+  newId?: () => string
+}
+
+export class Kernel {
+  private readonly logger: Logger
+
+  constructor(private readonly deps: KernelDeps) {
+    this.logger = deps.logger ?? silentLogger
+  }
+
+  /**
+   * Validate a launch config before the provider sees it.
+   *
+   * `proxy` and `captcha` both require `stealth` (section 2.3). Letting the
+   * provider reject the pairing costs a round trip and returns an error that has
+   * to be decoded; refusing here is instant and says exactly what is wrong. This is
+   * a `config` failure, and `config` is deliberately not retryable.
+   */
+  static validateLaunch(config: LaunchConfig): Result<LaunchConfig, Failure> {
+    if ((config.proxy || config.captcha) && !config.stealth) {
+      return err(
+        failure("config", "proxy and captcha both require stealth: true (plan section 2.3)"),
+      )
+    }
+    if (config.proxy && !/^[a-z]{2}$/.test(config.proxy.country)) {
+      return err(failure("config", "proxy country must be lowercase ISO 3166-1 alpha-2"))
+    }
+    if (config.viewpoint && !/^[a-z]{2}(-[A-Za-z0-9]{2,8})*$/.test(config.viewpoint.locale)) {
+      return err(failure("config", "locale must be BCP 47, e.g. th-TH"))
+    }
+    if (config.viewpoint && !config.viewpoint.timezoneId.includes("/")) {
+      // "Asia/Bangkok", not "GMT+7". An offset drifts across a DST boundary and,
+      // worse, an offset is not what a real browser reports — which makes it a
+      // tell on exactly the surfaces this exists to blend into.
+      return err(failure("config", "timezoneId must be an IANA zone, e.g. Asia/Bangkok"))
+    }
+    if (config.proxy && !isSupportedProxyCountry(config.proxy.country)) {
+      // Caught here rather than at the provider, which answers a 400 — a round
+      // trip, a decoded error, and, before `classify` learned to read a 4xx, two
+      // pointless retries. The alternative is named but never substituted: a
+      // silent country swap changes what a persona sees, which is the one
+      // variable the Persona Lab exists to hold still.
+      const nearest = NEAREST_AVAILABLE[config.proxy.country]
+      return err(
+        failure(
+          "config",
+          `proxy country ${config.proxy.country} is not in the provider's pool` +
+            (nearest ? `; nearest available is ${nearest}` : "") +
+            `. Supported: ${SUPPORTED_PROXY_COUNTRIES.join(", ")}`,
+        ),
+      )
+    }
+    return ok(config)
+  }
+
+  async withBrowser<T>(
+    purpose: SessionPurpose,
+    opts: BrowserOptions,
+    fn: (page: unknown, signal: AbortSignal) => Promise<T>,
+  ): Promise<Result<T, Failure>> {
+    const launcher = this.deps.browser
+    if (!launcher) return err(failure("config", "kernel has no browser launcher configured"))
+
+    const config: LaunchConfig = {
+      // Always on. Every session this system opens goes through a residential
+      // proxy — a persona without a country is not a persona — and the provider
+      // requires stealth for that pairing, so there is no configuration in which
+      // we would want it off.
+      stealth: true,
+      proxy: {
+        country: opts.country,
+        ...(opts.proxyTier ? { tier: opts.proxyTier } : {}),
+        ...(opts.proxySession ? { session: opts.proxySession } : {}),
+      },
+      ...(opts.locale && opts.timezoneId
+        ? {
+            viewpoint: {
+              locale: opts.locale,
+              timezoneId: opts.timezoneId,
+              ...(opts.geolocation ? { geolocation: opts.geolocation } : {}),
+            },
+          }
+        : {}),
+      ...(opts.captcha ? { captcha: true } : {}),
+      ...(opts.profileId ? { profileId: opts.profileId } : {}),
+      ...(opts.recording ? { recording: true } : {}),
+    }
+
+    const valid = Kernel.validateLaunch(config)
+    if (!valid.ok) return valid
+
+    const scope: SpendScope = {
+      ownerId: opts.ownerId ?? null,
+      purpose,
+      ...(opts.runId ? { runId: opts.runId } : {}),
+    }
+
+    // Refuse before opening anything. `0` requested because browser minutes are
+    // not knowable in advance — this asks only "is the meter already exhausted?",
+    // which is the question that matters (see the note on BudgetGuard).
+    const allowed = await this.guardCheck("solari.minutes", 0, scope)
+    if (!allowed.ok) return allowed
+
+    const deadlineMs = deadlineFor(purpose, opts.deadlineMs)
+
+    return withRetry(
+      async () => {
+        const sessionId = (this.deps.newId ?? randomUUID)()
+        let handle: Awaited<ReturnType<BrowserLauncher["launch"]>> | undefined
+        let outcome: SessionOutcome = "error"
+
+        try {
+          handle = await launcher.launch(config)
+        } catch (thrown) {
+          // Nothing opened, so nothing to close and nothing to meter. The failure
+          // classification is the whole value here: a 5xx from the provider is
+          // `upstream` and will be retried; a bad config is not.
+          return err(classify(thrown))
+        }
+
+        const live = handle
+        await this.deps.registry.open(
+          {
+            id: sessionId,
+            purpose,
+            ownerId: opts.ownerId ?? null,
+            domainId: opts.domainId ?? null,
+            personaId: opts.personaId ?? null,
+            country: opts.country,
+            locale: config.viewpoint?.locale ?? null,
+            timezoneId: config.viewpoint?.timezoneId ?? null,
+            startedAt: (this.deps.clock ?? (() => new Date()))(),
+            endedAt: null,
+            minutes: 0,
+            outcome: "running",
+            recordingRef: opts.recording ? live.id : null,
+          },
+          () => live.close(),
+        )
+
+        try {
+          const raced = await withDeadline(
+            deadlineMs,
+            async (signal) => {
+              const page = await live.newPage()
+              return fn(page, signal)
+            },
+            // Force-close on timeout. Without this the session bills until the
+            // provider's idle window expires, and `timeoutMs` is rolling, so a
+            // busy page may never be idle at all.
+            () => live.close(),
+          )
+          outcome = raced.ok ? "ok" : raced.error.kind === "timeout" ? "timeout" : "error"
+          if (!raced.ok) return raced
+          return ok(raced.value)
+        } catch (thrown) {
+          const f = classify(thrown)
+          outcome = f.kind === "blocked" ? "blocked" : "error"
+          return err(f)
+        } finally {
+          try {
+            await live.close()
+          } catch {
+            // Already closed by the deadline path, or the provider is gone. Either
+            // way the session row still has to be closed and the minutes metered,
+            // which is what the next two lines do.
+          }
+          const minutes = await this.deps.registry.close(sessionId, outcome)
+          await this.meter("solari.minutes", minutes, scope, purpose)
+        }
+      },
+      {
+        attempts: opts.attempts ?? 3,
+        logger: this.logger,
+        purpose,
+      },
+    )
+  }
+
+  async withSandbox<T>(
+    purpose: SessionPurpose,
+    opts: SandboxOptions,
+    fn: (
+      sandbox: Awaited<ReturnType<SandboxLauncher["create"]>>,
+      signal: AbortSignal,
+    ) => Promise<T>,
+  ): Promise<Result<T, Failure>> {
+    const launcher = this.deps.sandbox
+    if (!launcher) return err(failure("config", "kernel has no sandbox launcher configured"))
+
+    const deadlineMs = deadlineFor(purpose, opts.deadlineMs)
+    const scope: SpendScope = {
+      ownerId: opts.ownerId ?? null,
+      purpose,
+      ...(opts.runId ? { runId: opts.runId } : {}),
+    }
+
+    const allowed = await this.guardCheck("solari.minutes", 0, scope)
+    if (!allowed.ok) return allowed
+
+    return withRetry(
+      async () => {
+        let sandbox: Awaited<ReturnType<SandboxLauncher["create"]>> | undefined
+        try {
+          sandbox = await launcher.create({
+            template: opts.template,
+            // Give the provider's idle window headroom over our own deadline, so
+            // that when something does fire it is ours, with our error and our
+            // force-close, rather than a provider timeout we have to decode.
+            timeoutMs: deadlineMs + 60_000,
+          })
+        } catch (thrown) {
+          return err(classify(thrown))
+        }
+
+        const live = sandbox
+        const startedAt = (this.deps.clock ?? (() => new Date()))()
+        try {
+          await live.connect()
+          const raced = await withDeadline(
+            deadlineMs,
+            (signal) => fn(live, signal),
+            () => live.kill(),
+          )
+          if (!raced.ok) return raced
+          return ok(raced.value)
+        } catch (thrown) {
+          return err(classify(thrown))
+        } finally {
+          try {
+            // kill(), not close(): close() drops the local control channel and
+            // leaves the VM running until its idle timeout, still billing.
+            await live.kill()
+          } catch {
+            // Nothing further we can do; the idle timeout is the backstop.
+          }
+          const minutes = (Date.now() - startedAt.getTime()) / 60_000
+          await this.meter("solari.minutes", minutes, scope, purpose)
+        }
+      },
+      { attempts: opts.attempts ?? 3, logger: this.logger, purpose },
+    )
+  }
+
+  /** Every kernel session is released. For the SIGTERM path in the worker. */
+  async shutdown(): Promise<void> {
+    await this.deps.registry.shutdown()
+    await Promise.allSettled([this.deps.browser?.dispose(), this.deps.sandbox?.dispose()])
+  }
+
+  private async guardCheck(
+    meter: Parameters<BudgetGuard["check"]>[0],
+    requested: number,
+    scope: SpendScope,
+  ): Promise<Result<void, Failure>> {
+    const result = await this.deps.guard.check(meter, requested, scope)
+    if (!result.ok && result.error.meter) {
+      this.logger.emit({
+        at: now(),
+        event: "budget.refused",
+        meter,
+        window: scope.ownerId ? "owner.day" : "global.day",
+        ceiling: result.error.ceiling ?? 0,
+        used: result.error.used ?? 0,
+        requested: result.error.requested ?? requested,
+      })
+    }
+    return result
+  }
+
+  private async meter(
+    meter: Parameters<BudgetGuard["record"]>[0],
+    amount: number,
+    scope: SpendScope,
+    purpose: SessionPurpose,
+  ): Promise<void> {
+    if (amount <= 0) return
+    await this.deps.guard.record(meter, amount, scope)
+    this.logger.emit({ at: now(), event: "budget.spent", meter, amount, purpose })
+  }
+}
