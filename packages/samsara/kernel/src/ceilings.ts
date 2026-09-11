@@ -21,9 +21,15 @@ export const DEFAULT_CEILINGS: Record<MeterId, number> = {
    *  that even a bad model choice cannot exhaust the budget silently. */
   "llm.input.tokens": 20_000_000,
   "llm.output.tokens": 4_000_000,
-  /** ~$5. The wildcard. Google's current rate and whether the monthly free credit
-   *  applies must both be checked before Phase 2 starts; this is the one meter that
-   *  could blow the ceiling on its own. */
+  /** $0, and deliberately still a meter (ADR-0017). Resolution is tiered: the
+   *  coordinate usually comes out of the harvested artifact itself, and failing that
+   *  from an OSM extract in our own Postgres — neither costs anything. Only the last
+   *  tier calls a hosted geocoder, on a free tier (LocationIQ 5,000/day, read 11 Sep
+   *  2026), so this count guards a quota rather than a bill.
+   *
+   *  It mostly guards *us*. A resolver making more than a few hundred hosted calls a
+   *  day is failing at the two free tiers above it, and the fix is the resolver, not
+   *  a higher number here. Held far below the provider's own limit for that reason. */
   "geocode.calls": 800,
 }
 

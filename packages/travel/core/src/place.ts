@@ -35,7 +35,18 @@ export const place = z
     localName: z.string().min(1).nullable(),
     city: z.string().min(1),
     geo: geo.nullable(),
-    googlePlaceId: z.string().min(1).nullable(),
+    /**
+     * Where the coordinate came from, tagged with which tier produced it (ADR-0017).
+     * `artifact` — the harvested post carried it. `osm` — matched against our own
+     * OSM extract. `geocoder` — a hosted free-tier lookup. Source-tagged rather than
+     * a bare id because dedup must not merge an OSM node id with a geocoder's id
+     * that happens to collide.
+     */
+    externalRef: z
+      .object({ source: z.enum(["artifact", "osm", "geocoder"]), id: z.string().min(1) })
+      .nullable(),
+    /** Which tier resolved it: 0 artifact, 1 OSM extract, 2 hosted geocoder. */
+    resolvedTier: z.union([z.literal(0), z.literal(1), z.literal(2)]).nullable(),
     category: placeCategory,
     tags: z.array(z.string().min(1)),
     scores: scoreSet,

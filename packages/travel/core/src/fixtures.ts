@@ -44,7 +44,9 @@ export const placeFixture: Place = {
   localName: "เจ๊ไฝ",
   city: "Bangkok",
   geo: { lat: 13.7527, lng: 100.5063 },
-  googlePlaceId: "ChIJexample",
+  // Tier 0: the post itself carried the pin. The cheapest and most accurate path.
+  externalRef: { source: "artifact", id: "tiktok:7401234567890123456" },
+  resolvedTier: 0,
   category: "food",
   tags: ["street food", "michelin"],
   scores: {

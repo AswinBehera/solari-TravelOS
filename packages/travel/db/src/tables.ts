@@ -90,7 +90,10 @@ export const places = pgTable(
     city: text("city").notNull(),
     lat: doublePrecision("lat"),
     lng: doublePrecision("lng"),
-    googlePlaceId: text("google_place_id"),
+    /** ADR-0017: `{ source, id }`. Source-tagged so dedup cannot merge across tiers. */
+    externalRef: jsonb("external_ref"),
+    /** 0 artifact, 1 OSM extract, 2 hosted geocoder. Null until resolved. */
+    resolvedTier: integer("resolved_tier"),
     category: placeCategoryEnum("category").notNull().default("other"),
     tags: text("tags").array().notNull().default([]),
     /** A `ScoreSet` from @samsara/core: each named score carries its own explanations. */
@@ -102,7 +105,7 @@ export const places = pgTable(
   },
   (t) => [
     // Dedup's strongest key. Partial-unique would be better once we trust it; not yet.
-    index("places_google_id_idx").on(t.googlePlaceId),
+    index("places_external_ref_idx").on(t.externalRef),
     index("places_city_category_idx").on(t.city, t.category),
   ],
 )

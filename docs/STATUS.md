@@ -3,10 +3,10 @@
 Phase: 0
 Last completed: **P0.4** (`@samsara/kernel`: withBrowser/withSandbox, registry, deadlines, retry,
 three-metered budget guard, typed logs, viewpoints). 67 tests green, plus two live runs against
-Solari. Migration 0002 applied.
+Solari. Migration 0002 applied; **0003 and 0004 generated but NOT applied** — Docker was not running when ADR-0017 landed. Run `pnpm --filter @dt/db db:migrate` once `doen_thang_pg` is up.
 NEXT: P0.5
 Branch: main
-Known breakage: none
+Known breakage: none in code. Local database is one migration pair behind the schema — see above; `pnpm check` is green because nothing in Phase 0 reads `places`.
 
 Last session notes:
 - 2026-09-11 (Claude Code) — session 2
@@ -155,9 +155,16 @@ Decisions taken by the executor, for the architect to overrule if wrong:
   counters for three meters: LLM input and output are priced differently, so they are counted apart.
 
 Open for architect before P0.5:
-- **Google Places needs a quota cap before Phase 2.** It is the only vendor here that can bill
-  Aswin's card without anyone deciding to spend. A daily quota cap in the Google Cloud console is
-  the hard stop; a budget alert is not. Also re-derive the 800-call ceiling from the current rate.
+- **Closed 11 September 2026 — ADR-0017. Google is out of the stack.** The quota-cap obligation is
+  closed by deletion rather than by doing it: no Google API key is created, so there is nothing to
+  cap, and **no vendor in the system can now bill Aswin's card without someone deciding to spend.**
+  Resolution is tiered instead — coordinates already in the harvested artifact, then an OSM
+  named-POI extract in our own Postgres, then a free-tier hosted geocoder (LocationIQ or Geoapify),
+  then `unresolvable`. Not the public Nominatim server: its usage policy caps recurring scripts at
+  4 req/min and names systematic querying as grounds for a ban, so the interim plan section 8 was
+  carrying was never a safe harbour. Geocoding's ~$5 allocation returns to the reserve, which grows
+  to ~$9 and stays reserve. ADR-0018 finishes the job on the map side: the basemap is a Protomaps
+  `.pmtiles` extract we host, so there is no tile vendor either.
 - **Worth asking Solari: is `th` residential egress on the roadmap?** ADR-0015 works without it, but
   the answer turns a design question back into a scheduling one.
 - Section 10 questions 4, 5, 6, 7, 8 are unanswered. None of them block P0.5.

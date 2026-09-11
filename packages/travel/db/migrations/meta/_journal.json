@@ -22,6 +22,20 @@
       "when": 1789135849433,
       "tag": "0002_thin_absorbing_man",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1789139018033,
+      "tag": "0003_add_external_ref",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789139024911,
+      "tag": "0004_drop_google_place_id",
+      "breakpoints": true
     }
   ]
 }
