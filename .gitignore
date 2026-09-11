@@ -1,8 +1,16 @@
 node_modules/
 package-lock.json
 .env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 .venv/
 venv/
 screenshot.png
+
+# Build and tool caches
+dist/
+.turbo/
+*.tsbuildinfo
+coverage/

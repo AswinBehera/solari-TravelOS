@@ -1,0 +1,10 @@
+packages:
+  - "apps/*"
+  - "packages/samsara/*"
+  - "packages/travel/*"
+
+allowBuilds:
+  esbuild: true
+
+minimumReleaseAgeExclude:
+  - '@solarisdk/browser@0.1.4'
