@@ -167,5 +167,11 @@ Open for architect before P0.5:
   field. Question 1 is fully closed.
 - **Solari is not under maintenance.** The live call reached them and came back with a structured
   400, which is a healthy provider disagreeing with us.
-- The demo topology proposal (GitHub Actions cron + inline SSE, deleting BullMQ/Redis/the always-on
-  box) deviates from section 2.2 and needs a call plus an ADR before P0.5.
+- **Closed 11 September 2026 — ADR-0016.** The demo topology proposal (GitHub Actions cron + inline
+  SSE, deleting BullMQ/Redis/the always-on box) was reviewed cold by Gemini 3.1 Pro via `agy` and
+  two holes survived verification: a once-per-second poll behind SSE spends 86,400 of the free
+  plan's 100,000 daily Hyperdrive queries **per open tab, account-wide**, and the 5-minute cron
+  floor leaves a user-triggered harvest looking dead. Progress is now pushed on state change with a
+  bounded backing-off stream; foreground jobs are dispatched via `workflow_dispatch`. Consequence
+  for P0.5: the API gains an `actions:write` GitHub token as a Worker secret, and acceptance gains
+  a case asserting a bounded query count for a stream held open across a real harvest.
