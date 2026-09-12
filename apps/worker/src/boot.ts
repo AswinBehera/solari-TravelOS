@@ -7,8 +7,10 @@ import {
   PostgresSessionStore,
 } from "@samsara/kernel/postgres"
 import { createSolariBrowserLauncher, solariCredentials } from "@samsara/kernel/solari"
+import { PostgresPersonaStore } from "@samsara/personas/postgres"
 import { HandlerRegistry, noopHandler } from "./handlers.js"
 import { createPackRegistry } from "./packs.js"
+import { createKeepaliveHandler } from "./personas.js"
 
 /**
  * Everything the runner needs, assembled once at boot.
@@ -47,14 +49,28 @@ export function boot(env: NodeJS.ProcessEnv = process.env): Boot {
   // Spread rather than `browser: undefined`: `exactOptionalPropertyTypes` is on
   // (an executor decision from P0.1), so "absent" and "present and undefined" are
   // different types, and the kernel means the first one.
-  const browser = env.SOLARI_API_KEY
-    ? { browser: createSolariBrowserLauncher(solariCredentials(env)) }
-    : {}
+  const launcher = env.SOLARI_API_KEY
+    ? createSolariBrowserLauncher(solariCredentials(env))
+    : undefined
+  const browser = launcher ? { browser: launcher } : {}
 
   const kernel = new Kernel({ registry, guard, logger, ...browser })
 
   const handlers = new HandlerRegistry()
   handlers.register("noop", noopHandler)
+  // `launcher.profiles` and not a second client: the profile API and the browser
+  // API are the same provider account, and a second `new Solari()` would be a
+  // second loopback listener for four HTTP calls. Absent without a key, which
+  // means a keyless runner claims the job and fails it with `config` rather than
+  // quietly running a keepalive that saves nothing — the silent failure
+  // `ProfileStore` exists to warn about.
+  handlers.register(
+    "persona.keepalive",
+    createKeepaliveHandler({
+      store: new PostgresPersonaStore(database.db),
+      ...(launcher?.profiles ? { profiles: launcher.profiles } : {}),
+    }),
+  )
 
   return {
     db: database,

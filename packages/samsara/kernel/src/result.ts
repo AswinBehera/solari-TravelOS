@@ -65,7 +65,31 @@ export const failure = (
  * identify as the provider's fault is called `internal`, because a kernel that
  * blames upstream by default is a kernel that never gets debugged.
  */
+/**
+ * Thrown by a caller's callback when the *page* refused it.
+ *
+ * `classify` can only read what an exception says, and a surface refusing a
+ * session usually does not throw at all — Playwright's `goto` returns a response
+ * with a 403 on it and carries on. So the word-matching below catches a provider
+ * error that happens to mention a captcha and misses the actual case, which then
+ * classifies as `internal` and gets **retried** — spending a second session to be
+ * refused again and teaching the surface that this identity retries, which is the
+ * one thing the retry policy exists to prevent.
+ *
+ * An adapter that has read a status code knows the answer. This is how it says so
+ * without encoding it in a string and hoping the regex still matches.
+ */
+export class Blocked extends Error {
+  constructor(readonly detail: string) {
+    super(`page refused the session: ${detail}`)
+    this.name = "Blocked"
+  }
+}
+
 export function classify(thrown: unknown): Failure {
+  if (thrown instanceof Blocked) {
+    return failure("blocked", "page refused the session", { cause: thrown.detail })
+  }
   const e = thrown instanceof Error ? thrown : new Error(String(thrown))
   const cause = `${e.name}: ${e.message}`
   // Structural rather than `NodeJS.ErrnoException`. `classify` is on the path the

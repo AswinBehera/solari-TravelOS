@@ -16,6 +16,7 @@
     "@dt/db": "workspace:*",
     "@samsara/core": "workspace:*",
     "@samsara/kernel": "workspace:*",
+    "@samsara/personas": "workspace:*",
     "@samsara/refine": "workspace:*"
   },
   "devDependencies": {

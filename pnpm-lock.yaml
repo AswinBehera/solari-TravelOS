@@ -94,6 +94,9 @@ importers:
       '@samsara/kernel':
         specifier: workspace:*
         version: link:../../packages/samsara/kernel
+      '@samsara/personas':
+        specifier: workspace:*
+        version: link:../../packages/samsara/personas
       '@samsara/refine':
         specifier: workspace:*
         version: link:../../packages/samsara/refine
@@ -149,7 +152,24 @@ importers:
 
   packages/samsara/llm: {}
 
-  packages/samsara/personas: {}
+  packages/samsara/personas:
+    dependencies:
+      '@samsara/core':
+        specifier: workspace:*
+        version: link:../core
+      '@samsara/db':
+        specifier: workspace:*
+        version: link:../db
+      '@samsara/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@cloudflare/workers-types@4.20260702.1)(postgres@3.4.9)
+    devDependencies:
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
 
   packages/samsara/probe: {}
 

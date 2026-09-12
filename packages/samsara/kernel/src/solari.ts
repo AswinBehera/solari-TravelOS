@@ -4,6 +4,7 @@ import type {
   BrowserHandle,
   BrowserLauncher,
   LaunchConfig,
+  ProfileStore,
   SandboxConfig,
   SandboxHandle,
   SandboxLauncher,
@@ -70,6 +71,18 @@ export function createSolariBrowserLauncher(creds: SolariCredentials): BrowserLa
     // proxy listener. Skipping it used to hang Node at exit; since 0.1.3 the
     // listener is unref'd, but a scheduled runner should still free it explicitly.
     dispose: () => solari.close(),
+    // Hung off the launcher rather than given its own factory, because a second
+    // `new Solari()` is a second API client and a second loopback listener for
+    // four HTTP calls. One client, one dispose.
+    profiles: {
+      create: (name) => solari.profiles.create({ name }),
+      list: () => solari.profiles.list(),
+      // `storageState` is `unknown` at the port (see `ProfileStore`); this is the
+      // one line in the system that knows its real shape, and it is the same line
+      // that knows the SDK. The cast does not travel.
+      save: (id, storageState) => solari.profiles.save(id, storageState as never),
+      delete: (id) => solari.profiles.delete(id),
+    } satisfies ProfileStore,
   }
 }
 

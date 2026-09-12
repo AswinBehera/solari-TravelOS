@@ -2,7 +2,35 @@
 
 Phase: 1 — in progress. Phase 0 is **complete, pending the gate** (below; the gate is a human
 review and does not block buildable work).
-Last completed: **P1.0 — the signal-matrix experiment, run.** 18 cells, 4.79 browser-minutes of
+Last completed: **P1.1 — `@samsara/personas`.** The identity package: create, health state
+machine, ban detection, `keepalive`. 54 tests, **zero browser minutes spent** building it, seam
+allowances still **0 of 5** across 82 files.
+
+The session's finding is that four separate defects here would each have produced a **perfectly
+green run** — no failing test, no alert, no symptom:
+
+| silence | what it looks like when it happens |
+|---|---|
+| profile never `save`d | session opens, pages load, row says `ok`, identity accumulates nothing |
+| `403` classified as `internal` | refusal is **retried** against the surface that just refused; nothing ever recorded `blocked` |
+| `seeded` silently downgraded to `anon` | persona counts as seeded in every listing for weeks |
+| read-modify-write on the minute counter | two concurrent runners lose an update, always *downward*, under a hard ceiling |
+
+The second is the serious one and it was found by a test failing for the wrong reason:
+**the ban detector could not have detected a ban.** Playwright's `goto` does not throw on a
+refusal — it returns a response carrying the status — so every real block classified as `internal`,
+and `internal` is the one `retry.ts` retries. Fixed in the kernel with a `Blocked` error class that
+`classify` recognises by instance, before any string matching.
+
+Two decisions worth carrying forward: the **health streak is derived from `sessions` rows, not
+stored** (so a threshold change is retroactive rather than leaving personas banned under a rule
+nobody can reconstruct), and **`timezone_id` is a stored column** rather than derived from country
+or locale — P1.0 measured those apart, and an identity whose clock is computed from its IP cannot
+express that result. That makes `Viewpoint` `{country, locale, timezoneId}` in the persona row,
+which answers gate question 1 by building it. See
+`casestudy_and_thinking/sessions/2026-09-12-p11-the-identity.md`.
+
+Before that: **P1.0 — the signal-matrix experiment, run.** 18 cells, 4.79 browser-minutes of
 4,000, and a result that changes the priority order for P1.3–P1.6:
 
 | factor | effect | vs a 21% noise floor |
@@ -41,8 +69,13 @@ allows of five**. A third finding fell out of the live run — `Asia/Ho_Chi_Minh
 viewpoint check was reporting a false negative. Before that, **P0.7** (the seam check),
 **P0.6** (dev ergonomics) and **P0.5** (the queue and the two runtimes); all three were
 committed this session, having lived only in the working tree until now.
-NEXT: **P1.1** (`@samsara/personas`), and **the Phase 0 gate** (see below), which now has a fourth
-question: P1.0 measured the signal stack and it does not match ADR-0015's ordering.
+NEXT: **P1.2** (`@samsara/sources` adapter interface + `@samsara/harvest` run orchestration), and
+**the Phase 0 gate** (see below), whose fourth question — P1.0 measured the signal stack and it
+does not match ADR-0015's ordering — is still open. Gate question 1 (`Viewpoint`'s shape) is now
+partly answered in code: it is `{country, locale, timezoneId}`, stored on the persona row.
+Still an architect's call before P1.2: `jobs.pg.test.ts` and `personas.pg.test.ts` both TRUNCATE
+the same database `pnpm dev` drains. Harmless today because the dev data is disposable; it stops
+being harmless the first time it is not.
 Branch: main
 Known breakage: none. (The 0003/0004 gap from last session is closed — Docker was started, all six
 migrations are recorded, and `places.external_ref`/`resolved_tier` are live.)

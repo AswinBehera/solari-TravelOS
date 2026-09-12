@@ -57,6 +57,33 @@ export type KernelEvent = Base &
         ageMs: number
       }
     | {
+        event: "persona.created"
+        personaId: string
+        country: string
+        locale: string
+        /** `anon` or `seeded`. The locality is caller text and stays out of here. */
+        tier: string
+        /** Whether a provider profile was attached. Never the profile's id. */
+        profile: boolean
+      }
+    | {
+        event: "persona.health"
+        personaId: string
+        from: string
+        to: string
+        /** Kernel-authored. The evidence in counts, never the pages that produced it. */
+        reason: string
+      }
+    | {
+        event: "persona.keepalive"
+        personaId: string
+        /** How many pages were visited. Not which: a URL can carry a query string. */
+        visited: number
+        /** False when the accumulated state was thrown away. See `ProfileStore`. */
+        saved: boolean
+        savedBytes: number | null
+      }
+    | {
         event: "job.claimed"
         jobId: string
         /** The handler key, e.g. `harvest.run`. Never the payload. */

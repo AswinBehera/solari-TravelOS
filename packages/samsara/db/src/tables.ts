@@ -44,6 +44,13 @@ export const personas = pgTable(
     /** Lowercase ISO 3166-1 alpha-2 — the form the proxy layer takes. */
     country: text("country").notNull(),
     locale: text("locale").notNull(),
+    /**
+     * IANA zone, stored rather than derived. Deriving it from `country` or from
+     * `locale` would re-couple the two things this system exists to pull apart:
+     * P1.0 measured a `us` egress asking in Thai returning entirely Thai results,
+     * and an identity whose clock is computed from its IP cannot express that.
+     */
+    timezoneId: text("timezone_id").notNull(),
     tier: personaTierEnum("tier").notNull(),
     solariProfileId: text("solari_profile_id"),
     /** Sticky IP key, so one identity keeps one address across sessions. */

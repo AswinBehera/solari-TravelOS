@@ -63,6 +63,35 @@ export interface BrowserLauncher {
   launch(config: LaunchConfig): Promise<BrowserHandle>
   /** Process shutdown. Releases the client's pool; separate from closing a browser. */
   dispose(): Promise<void>
+  /**
+   * Optional because every test above this line uses a fake that has no profiles,
+   * and because a launcher without one is still a working launcher — it just
+   * cannot carry state between sessions.
+   */
+  profiles?: ProfileStore
+}
+
+/**
+ * The provider-side cookie and localStorage jar, attached to a session by id.
+ *
+ * The trap is in `save`, and it is worth stating twice because it is silent:
+ * **attaching a profile does not persist what the session accumulated.** The
+ * provider hands the stored state to the context on launch and discards whatever
+ * the browser did with it on release, unless someone calls `save` before the
+ * close. A keepalive that forgets is indistinguishable from one that worked — the
+ * session opens, the pages load, the row says `ok`, and the identity is exactly as
+ * naive as it was an hour ago.
+ *
+ * `storageState` is `unknown` for the same reason `newPage()` returns `unknown`:
+ * its real type is Playwright's, and that library must not be reachable from a
+ * package the Workers runtime may have to load.
+ */
+export interface ProfileStore {
+  create(name: string): Promise<{ id: string; name: string }>
+  list(): Promise<{ id: string; name: string }[]>
+  /** Explicit, and the only thing that makes a profile worth attaching. */
+  save(id: string, storageState: unknown): Promise<{ version: number; sizeBytes: number }>
+  delete(id: string): Promise<void>
 }
 
 export interface SandboxConfig {

@@ -49,6 +49,29 @@ export interface BrowserOptions {
   runId?: string
   /** One try plus this many retries. Defaults to the section 2.4 policy. */
   attempts?: number
+  /**
+   * Called once per attempt, after the session is closed and metered.
+   *
+   * Added because two callers in a row had to reconstruct this by scraping
+   * `session.close` out of the log stream, and the second one got it wrong: it
+   * read only the last close and so dropped the minutes of a failed first attempt
+   * the guard had already charged, under-reporting a run's bill by a third. The
+   * information existed; there was just no way to ask for it, so everybody parsed
+   * the logs, and log-parsing is how a number stops matching the meter.
+   *
+   * Fires on the failure path too, because that is exactly when it is easiest to
+   * forget that minutes were still spent.
+   */
+  onSession?: (spend: SessionSpend) => void
+}
+
+/** What one attempt of `withBrowser` actually cost. See `onSession`. */
+export interface SessionSpend {
+  sessionId: string
+  outcome: SessionOutcome
+  minutes: number
+  /** 1-based, within this `withBrowser` call. */
+  attempt: number
 }
 
 export interface SandboxOptions {
@@ -173,7 +196,7 @@ export class Kernel {
     const deadlineMs = deadlineFor(purpose, opts.deadlineMs)
 
     return withRetry(
-      async () => {
+      async (attempt) => {
         const sessionId = (this.deps.newId ?? randomUUID)()
         let handle: Awaited<ReturnType<BrowserLauncher["launch"]>> | undefined
         let outcome: SessionOutcome = "error"
@@ -236,6 +259,7 @@ export class Kernel {
           }
           const minutes = await this.deps.registry.close(sessionId, outcome)
           await this.meter("solari.minutes", minutes, scope, purpose)
+          opts.onSession?.({ sessionId, outcome, minutes, attempt })
         }
       },
       {

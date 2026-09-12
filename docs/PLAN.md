@@ -445,7 +445,27 @@ Tasks:
   about as much as waiting five minutes. This reorders P1.3–P1.6 around query construction rather
   than proxy geography — see gate question 4 in STATUS and
   `casestudy_and_thinking/sessions/2026-09-12-p10b-the-result.md`.**
-- **P1.1** `@samsara/personas`: create persona (row + optional Solari profile + sticky proxy session key), health state machine, `keepalive` job (launch, visit two neutral local pages, save profile, update lastAliveAt). Ban detection heuristic: consecutive `Blocked` results flip health to `degraded`, three in a row to `banned`.
+- **P1.1** ✅ **Done.** `@samsara/personas`: create persona (row + optional Solari profile + sticky proxy session key), health state machine, `keepalive` job (launch, visit two neutral local pages, save profile, update lastAliveAt). Ban detection heuristic: consecutive `Blocked` results flip health to `degraded`, three in a row to `banned`.
+  **Shipped with four departures from the line above, each for a stated reason.**
+  (1) The **health streak is derived from `sessions`, not stored** — a stored counter makes a
+  threshold change un-retroactive, leaving personas banned under a rule no longer in the codebase.
+  Only `ok` and `blocked` count as evidence; a timeout is our clock and an error is our code, so
+  neither may ban an identity.
+  (2) **`timezone_id` is a stored column** on `personas`, not derived from country or locale —
+  P1.0 measured those axes apart and an identity whose clock is computed from its IP cannot
+  express the result. `Viewpoint` is now `{country, locale, timezoneId}` in the row, which
+  answers gate question 1 by building it.
+  (3) The **pages are a job-payload argument**, never a constant: the moment `@samsara/personas`
+  knows which pages are ordinary, it holds a vertical's vocabulary and `pnpm check:seam` fails.
+  The `persona.keepalive` handler lives in `apps/worker`, on the travel side of the seam.
+  (4) **`403` had to be fixed in the kernel first.** Playwright's `goto` does not throw on a
+  refusal — it returns a response carrying the status — so every real block classified as
+  `internal`, which `retry.ts` retries. The ban detector could not have detected a ban. New
+  `Blocked` error class in `@samsara/kernel`, recognised by `classify` before any string match.
+  Also new: `ProfileStore` port, `withBrowser`'s `onSession`/`SessionSpend` callback (which
+  retires the log-scraping that under-reported P1.0's bill by 32%), three `persona.*` log events,
+  migration `0006_persona_timezone`. 54 tests, **0 browser minutes spent**, seam allowances still
+  0 of 5. See `casestudy_and_thinking/sessions/2026-09-12-p11-the-identity.md`.
 - **P1.2** `@samsara/sources` adapter interface: `harvest(ctx, query): Promise<RawItem[]>` where ctx carries persona, page, logger. Plus `@samsara/harvest`: run orchestration (persona x source x query), rate limiting, `HarvestRun` rows. Fixture-based tests for parsers, separated from fetching. **The adapter interface takes a query string and returns RawItems. It does not know what the caller will do with them.**
 - **P1.3** Adapter: **YouTube regional trending + search** (logged-out, region param). Most stable target; proves the shape.
 - **P1.4** Adapter: **TikTok logged-out search/discover** with stealth + the P1.0 viewpoint (Thai query, `th-TH` locale, `Asia/Bangkok`, `sg` egress — there is no `th` egress, see ADR-0015). TikTok is the surface most likely to gate on IP geolocation, so this is where the gap shows up if it shows up; report it as a gap rather than working around it. Two strategies: rendered page scrape, then intercepted XHR JSON. Record sessions for first 20 runs.
