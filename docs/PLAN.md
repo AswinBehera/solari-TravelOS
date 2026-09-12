@@ -438,6 +438,13 @@ Tasks:
   what could have been shared rather than by k, so a thin page is not read as a changed one.
   Eighteen sessions, ~9.0 minutes. The arithmetic is in `@samsara/harvest`, the query strings and
   the surface in `@dt/lab`, and the whole zero-cost half is tested with no network.*
+  **Run 12 September 2026 — 20 sessions, 4.79 minutes, zero refusals. Query language 100% (zero
+  shared results of twenty), egress 31%, locale 23%, stored region 20%, against a 21% noise floor.
+  One dominant signal and a flat remainder, not a graded stack. The answer to "how do you get local
+  content without a local IP" is that you ask in the local language; the proxy country is worth
+  about as much as waiting five minutes. This reorders P1.3–P1.6 around query construction rather
+  than proxy geography — see gate question 4 in STATUS and
+  `casestudy_and_thinking/sessions/2026-09-12-p10b-the-result.md`.**
 - **P1.1** `@samsara/personas`: create persona (row + optional Solari profile + sticky proxy session key), health state machine, `keepalive` job (launch, visit two neutral local pages, save profile, update lastAliveAt). Ban detection heuristic: consecutive `Blocked` results flip health to `degraded`, three in a row to `banned`.
 - **P1.2** `@samsara/sources` adapter interface: `harvest(ctx, query): Promise<RawItem[]>` where ctx carries persona, page, logger. Plus `@samsara/harvest`: run orchestration (persona x source x query), rate limiting, `HarvestRun` rows. Fixture-based tests for parsers, separated from fetching. **The adapter interface takes a query string and returns RawItems. It does not know what the caller will do with them.**
 - **P1.3** Adapter: **YouTube regional trending + search** (logged-out, region param). Most stable target; proves the shape.

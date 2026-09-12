@@ -15,7 +15,10 @@ export interface CellResult {
   startedAt: string
   /** The identifiers, best first. Empty when the cell was refused. */
   items: string[]
+  /** Summed across retries: a failed attempt is a session that really ran. */
   minutes: number
+  /** Sessions opened for this cell. Above 1 means something failed and was retried. */
+  attempts: number
   sessionId: string | null
   /** Set when the session failed; `kind` is the kernel's own classification. */
   error?: { kind: string; message: string }
@@ -41,5 +44,7 @@ export interface RunFile {
   factors: Record<string, readonly string[]>
   queries: Record<string, string>
   minutesSpent: number
+  /** Set when a run's arithmetic had to be corrected after the fact. */
+  note?: string
   cells: CellResult[]
 }

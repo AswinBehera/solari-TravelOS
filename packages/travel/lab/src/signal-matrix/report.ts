@@ -17,7 +17,9 @@ const here = dirname(fileURLToPath(import.meta.url))
 const resultsDir = resolve(here, "../../results")
 
 function latestRun(): string {
-  const arg = process.argv[2]
+  // Flags filtered out, or `--k=10` is read as a filename and the reporter
+  // silently reads the latest run at the default depth instead of the one asked for.
+  const arg = process.argv.slice(2).find((a) => !a.startsWith("--"))
   if (arg) return resolve(process.cwd(), arg)
   const files = readdirSync(resultsDir)
     .filter((name) => name.endsWith(".json"))
@@ -28,6 +30,27 @@ function latestRun(): string {
 }
 
 const pct = (n: number | null): string => (n === null ? "   —  " : `${(n * 100).toFixed(0)}%`)
+
+/**
+ * An effect read against what changing nothing produces.
+ *
+ * The thresholds are a judgement and they live here rather than in
+ * `@samsara/harvest`, which computes numbers and does not get to decide what
+ * counts as large. Stated so a reader can disagree with them: at or below the
+ * floor is nothing, within twice the floor is the same order of magnitude as
+ * noise and should not be built on, beyond that is a real lever.
+ *
+ * The column exists because without it "egress 31%" reads as a finding, and
+ * beside a 21% floor it is very nearly a rounding error.
+ */
+function verdict(effect: number | null, floor: number | null): string {
+  if (effect === null) return "not measured"
+  if (floor === null) return "no floor — unreadable"
+  const noise = 1 - floor
+  if (effect <= noise) return "**noise**"
+  if (effect <= noise * 2) return "weak"
+  return "**dominant**"
+}
 
 function main(): void {
   const path = latestRun()
@@ -80,12 +103,18 @@ function main(): void {
 
   console.log("\n## Which signal moved the result")
   console.log("")
-  console.log("| factor | pairs | mean overlap | effect | mean rank shift |")
-  console.log("|---|---:|---:|---:|---:|")
+  console.log("| factor | pairs | mean overlap | effect | vs noise | mean rank shift |")
+  console.log("|---|---:|---:|---:|---|---:|")
   for (const row of factorEffects(cells, k)) {
     console.log(
       `| ${row.factor} | ${row.pairs} | ${pct(row.meanOverlap)} | ${pct(row.effect)} | ` +
+        `${verdict(row.effect, floor)} | ` +
         `${row.meanRankShift === null ? "—" : row.meanRankShift.toFixed(1)} |`,
+    )
+  }
+  if (floor !== null) {
+    console.log(
+      "\nA factor whose effect does not clear the noise floor has not been shown to do anything.",
     )
   }
 

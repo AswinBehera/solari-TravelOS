@@ -41,19 +41,35 @@ const seed = seedArg ? Number(seedArg.slice("--seed=".length)) : 20260912
 
 type SessionClose = Extract<KernelEvent, { event: "session.close" }>
 
+/**
+ * Prints every kernel event and keeps the closes for the cell in flight.
+ *
+ * **Sums them.** A cell that fails and retries closes twice, and the first close
+ * is a real session that really consumed minutes — the budget guard meters it,
+ * because the guard meters measurement rather than success. Reading only the last
+ * close attributed 3.25 minutes to a run that had actually spent 4.79, which is
+ * the wrong direction for a number whose whole job is to be trusted against a
+ * hard ceiling. The first run of this experiment found it by disagreeing with
+ * `budget_counters`.
+ */
 class TeeLogger implements Logger {
-  #lastClose: SessionClose | null = null
+  #closes: SessionClose[] = []
 
   emit(event: KernelEvent): void {
-    if (event.event === "session.close") this.#lastClose = event
+    if (event.event === "session.close") this.#closes.push(event)
     jsonLogger.emit(event)
   }
 
-  /** Reads and clears, so one cell can never be charged another cell's minutes. */
-  takeClose(): SessionClose | null {
-    const close = this.#lastClose
-    this.#lastClose = null
-    return close
+  /** Reads and clears, so one cell is never charged another cell's minutes. */
+  takeCell(): { sessionId: string | null; minutes: number; attempts: number } {
+    const closes = this.#closes
+    this.#closes = []
+    return {
+      // The last one is the attempt that produced the items.
+      sessionId: closes[closes.length - 1]?.sessionId ?? null,
+      minutes: closes.reduce((sum, close) => sum + close.minutes, 0),
+      attempts: closes.length,
+    }
   }
 }
 
@@ -119,9 +135,7 @@ async function main(): Promise<void> {
     seen.set(key, replicate + 1)
 
     const cellStartedAt = new Date().toISOString()
-    let sessionId: string | null = null
-    let minutes = 0
-    logger.takeClose()
+    logger.takeCell()
 
     const result = await kernel.withBrowser(
       "harvest",
@@ -139,14 +153,10 @@ async function main(): Promise<void> {
       },
     )
 
-    // The minutes are metered by the kernel whether the cell succeeded or not,
-    // which is the number that matters for the ceiling.
-    const closed = logger.takeClose()
-    if (closed) {
-      sessionId = closed.sessionId
-      minutes = closed.minutes
-      minutesSpent += closed.minutes
-    }
+    // Metered by the kernel whether the cell succeeded or not, and summed across
+    // retries, which is the number that matters against the ceiling.
+    const { sessionId, minutes, attempts } = logger.takeCell()
+    minutesSpent += minutes
 
     cells.push(
       result.ok
@@ -157,6 +167,7 @@ async function main(): Promise<void> {
             startedAt: cellStartedAt,
             items: result.value.items,
             minutes,
+            attempts,
             sessionId,
             ...(result.value.refusedBy ? { refusedBy: result.value.refusedBy } : {}),
           }
@@ -167,6 +178,7 @@ async function main(): Promise<void> {
             startedAt: cellStartedAt,
             items: [],
             minutes,
+            attempts,
             sessionId,
             error: { kind: result.error.kind, message: result.error.message },
           },

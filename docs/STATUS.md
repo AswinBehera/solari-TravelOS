@@ -2,16 +2,32 @@
 
 Phase: 1 — in progress. Phase 0 is **complete, pending the gate** (below; the gate is a human
 review and does not block buildable work).
-Last completed: **P1.0, the zero-cost half.** The signal-matrix experiment is designed, built and
+Last completed: **P1.0 — the signal-matrix experiment, run.** 18 cells, 4.79 browser-minutes of
+4,000, and a result that changes the priority order for P1.3–P1.6:
+
+| factor | effect | vs a 21% noise floor |
+|---|---:|---|
+| **query language** | **100%** (0 shared results of 20) | **dominant** |
+| egress country | 31% | weak |
+| browser locale + clock | 23% | weak |
+| stored region preference | 20% | **noise** |
+
+**Asking in Thai and asking in English return completely disjoint lists** — same IP, same browser,
+same second. Everything else is at or barely above what repeating a single cell produces. The
+honest answer to "how do you get local content without a local IP" is: *you ask in the local
+language*. ADR-0015 described a graded stack; the measurement shows a cliff, and mildly disagrees
+about the ordering below it (egress sits at the top of the weak cluster, not the bottom) — see
+`casestudy_and_thinking/sessions/2026-09-12-p10b-the-result.md`, which also records that the run
+found a 32% under-report in its own billing and what was done about it. One surface, one query,
+one day; the `Surface` interface exists so a second costs a file.
+
+Before that: **P1.0, the zero-cost half.** The signal-matrix experiment is designed, built and
 tested without opening a single session: the factorial machinery, pairwise overlap, factor effects,
 noise floor and seeded run order live in `@samsara/harvest` (29 tests, no network); the two query
 strings, the locale-to-clock map, the region hints and the YouTube surface live in a new `@dt/lab`
 package (15 tests). Writing the design down found four flaws in the plan's one-sentence version of
 the experiment, none of which needed a session to discover — see
-`casestudy_and_thinking/sessions/2026-09-12-p10-designing-the-experiment.md`. **The live run is
-built and priced but not executed: 18 sessions, ~9.0 browser-minutes of 4,000, awaiting a
-decision.** `pnpm --filter @dt/lab signal-matrix:plan` prints every cell in execution order and
-opens nothing.
+`casestudy_and_thinking/sessions/2026-09-12-p10-designing-the-experiment.md`.
 Before that: **P0.8** (the acceptance run): Phase 0's own three acceptance criteria executed
 literally for the first time. Criterion 3 held. **Criteria 1 and 2 were both false and had been
 for days, with no symptoms.** A fresh clone following the README produced `67 passed | 14
@@ -25,8 +41,8 @@ allows of five**. A third finding fell out of the live run — `Asia/Ho_Chi_Minh
 viewpoint check was reporting a false negative. Before that, **P0.7** (the seam check),
 **P0.6** (dev ergonomics) and **P0.5** (the queue and the two runtimes); all three were
 committed this session, having lived only in the working tree until now.
-NEXT: **approve or decline the P1.0 live run** (9 minutes, see above), and **the Phase 0
-gate** (see below). P1.1 is buildable in parallel with either.
+NEXT: **P1.1** (`@samsara/personas`), and **the Phase 0 gate** (see below), which now has a fourth
+question: P1.0 measured the signal stack and it does not match ADR-0015's ordering.
 Branch: main
 Known breakage: none. (The 0003/0004 gap from last session is closed — Docker was started, all six
 migrations are recorded, and `places.external_ref`/`resolved_tier` are live.)
@@ -463,38 +479,45 @@ Open for architect before P0.8:
 
 ---
 
-## The P1.0 live run — priced, not spent
+## The P1.0 live run — done
 
-Everything is built. The run is one command and nobody has approved it yet, which is the point.
+Ran 12 September 2026. 18 cells, 20 sessions, **4.790 browser-minutes of 4,000**, zero refusals.
+Results in `packages/travel/lab/results/2026-09-12T101036-youtube.search.json`; the table is at the
+top of this file and the reading is in
+`casestudy_and_thinking/sessions/2026-09-12-p10b-the-result.md`.
 
 ```
-pnpm --filter @dt/lab signal-matrix:plan   # prints all 18 cells, opens nothing
-pnpm --filter @dt/lab signal-matrix:run    # spends ~9 browser-minutes
-pnpm --filter @dt/lab signal-matrix:report # reads the results file, prints the table
+pnpm --filter @dt/lab signal-matrix:plan            # prints all 18 cells, opens nothing
+pnpm --filter @dt/lab signal-matrix:run             # spends browser-minutes
+pnpm --filter @dt/lab signal-matrix:report          # the table, from the latest results file
+pnpm --filter @dt/lab exec tsx src/signal-matrix/report.ts --k=10   # re-read at another depth
 ```
+
+Re-reading costs nothing, which was the point of keeping the arithmetic in a package with no
+network in it.
 
 | | |
 |---|---|
-| Sessions | 18 (16 design cells + 2 replicates) |
-| Estimated cost | **~9.0 browser-minutes of 4,000** — 0.225% of the ceiling |
-| Spent to date | 0.105 minutes |
+| Sessions | 20 (16 design cells + 2 replicates, 2 of them retried) |
+| Estimated beforehand | ~9.0 browser-minutes |
+| **Actually spent** | **4.790 minutes of 4,000** — 0.12% of the ceiling |
+| Clean cell / failed attempt | 0.16 min / **0.77 min** — a failure costs 5x, the deadline must expire |
+| Cumulative to date | 4.895 minutes |
 | Surface | YouTube search, logged out, top 20 |
 | Run order | shuffled, seed `20260912`, recorded in the results file |
 | Counters | the real Postgres ones; the run refuses to start without `DATABASE_URL` |
 | Output | a JSON results file in `packages/travel/lab/results/`, read by a network-free reporter |
 
-Three things to know before deciding:
+Three things to carry with the number:
 
-1. **Nine minutes, not eight.** The plan budgeted sixteen cells. Two of them run twice, because a
-   design with no repeated cell cannot distinguish a signal from the surface's own drift, and the
-   whole table would be unreadable without that control.
-2. **The answer will be YouTube's answer.** One surface, one query, one day. The `Surface`
-   interface exists so a second surface costs a file rather than a rewrite, but the first table
-   should not be read as a general law.
-3. **It may come back refused.** A consent wall or captcha on some cells is a live possibility.
-   Those cells are excluded from the averages and printed by name rather than folded in as zero
-   overlap — a block and a working signal look identical in a set intersection, and that is the one
-   confusion that would invalidate the conclusion.
+1. **The two replicates earned their minute.** The noise floor came back at 21% — repeating one
+   cell changes a fifth of its own list. Three of the four factors land within ten points of that,
+   so without the control the table would have read as four findings instead of one.
+2. **The answer is YouTube's answer.** One surface, one query, one day. The `Surface` interface
+   exists so a second surface costs a file rather than a rewrite.
+3. **Nothing was refused** — no consent wall, no captcha, from either egress. Two cells failed
+   `internal` and recovered on retry. The refusal path is written and untested against a real
+   refusal, which is worth remembering when P1.4 points this at TikTok.
 
 ## The Phase 0 gate
 
@@ -526,7 +549,19 @@ is one file rather than every consumer. **The question:** accept the deferral, o
 member whose shape must be fixed now because something in P1 will otherwise be built against
 the wrong assumption?
 
-**3. ADRs 0009 to 0014**, plus the four written since:
+**4. ADR-0015's signal ordering, now that it has been measured** — new, and the only gate item
+with data behind it. The ADR orders the stack: account region, query language, stored preferences,
+browser locale and clock, engagement history, egress IP last. P1.0 measured the middle four of
+those on a logged-out surface and found **a cliff, not a list**: query language at 100%, then
+egress 31%, locale 23%, stored region 20%, against a noise floor of 21%. Three of the four are
+within ten points of noise, and egress — which the ADR puts last — sits at the *top* of that weak
+cluster rather than the bottom. **The question:** amend ADR-0015 to say the stack is one dominant
+signal plus a flat remainder (which makes the missing Thai egress a non-issue and reshapes
+P1.3–P1.6 around query construction), or treat one surface on one day as too thin to amend a
+decision on and re-run against a second surface first? A second surface costs a file and about
+five minutes.
+
+**5. ADRs 0009 to 0014**, plus the four written since:
 - **0009 seam** — with the P0.7 amendment: the allowance ceiling was set before anyone tried to
   enforce it; 44 breaches, all fixed by rewriting, zero allows used.
 - **0010 domain pack** — see the deferral above.
@@ -536,8 +571,7 @@ the wrong assumption?
   **0017 place resolution without Google**, **0018 Protomaps basemap**, **0019 kernel owns the
   queue and splits by runtime**.
 
-**Open questions that block P1**, unchanged from last session and now the only things standing
-between here and P1.0:
+**Open questions**, unchanged from last session. None of them blocked P1.0 and none block P1.1:
 - Section 10 questions 4, 5, 6, 7, 8 are unanswered.
 - Whether to ask Solari about `th` residential egress on their roadmap. ADR-0015 works without
   it; the answer turns a design question back into a scheduling one.
