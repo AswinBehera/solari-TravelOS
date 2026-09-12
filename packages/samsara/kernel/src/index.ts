@@ -19,5 +19,6 @@ export * from "./registry.js"
 export * from "./result.js"
 export * from "./retry.js"
 export * from "./stores/memory.js"
+export * from "./timezone.js"
 
 export const PACKAGE = "@samsara/kernel" as const
