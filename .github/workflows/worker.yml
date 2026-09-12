@@ -1,0 +1,81 @@
+# The runner (ADR-0014). There is no always-on box: this workflow *is* the worker.
+#
+# Two triggers, because there are two kinds of work:
+#
+#   schedule          — background drains. Five minutes is GitHub's floor, and it
+#                       is a floor rather than a guarantee: a scheduled run may be
+#                       delayed under load and is dropped entirely on a repository
+#                       with no recent activity. Everything here assumes that.
+#   workflow_dispatch — foreground work (ADR-0016). A human pressed a button and is
+#                       watching a progress stream; waiting up to five minutes for
+#                       the next tick would make the product look dead.
+#
+# The `jobId` input is not used to select work. The runner claims from the queue
+# with `FOR UPDATE SKIP LOCKED` and drains whatever it wins, which is what makes a
+# cancelled run harmless. The input exists so a run can be correlated with the job
+# that caused it in the Actions log — the dispatch API returns 204 and no run id,
+# so this is the only thread between the two.
+name: worker
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      jobId:
+        description: "Job that triggered this run (for correlation only; the runner drains the queue)"
+        required: false
+        type: string
+
+# One runner at a time. A double-click that slipped past the API's idempotency
+# check still cannot spend two runners, and two concurrent drains would only
+# contend for the same rows anyway. `cancel-in-progress: false` because the
+# in-flight run is doing real work with real browser minutes attached to it.
+concurrency:
+  group: worker
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  drain:
+    runs-on: ubuntu-latest
+    # Hard stop. The drain's own budget (WORKER_BUDGET_MS) is four minutes so it
+    # finishes on its own well before this; the timeout is the backstop for a
+    # handler that hangs on something that never settles. Minutes spent here are
+    # free on a public repository, but a hung run holds the concurrency group.
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Drain the queue
+        run: pnpm --filter @dt/worker start
+        env:
+          # Direct to Postgres, not through Hyperdrive: Hyperdrive is a Workers
+          # binding, and its 100,000-queries-a-day account ceiling is spent by the
+          # API's streams. The runner has no reason to compete for it.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SOLARI_API_KEY: ${{ secrets.SOLARI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Ceilings are read from the environment but *defaulted in code*
+          # (`loadCeilings`). A missing secret cannot raise a budget.
+          BUDGET_SOLARI_MINUTES: ${{ vars.BUDGET_SOLARI_MINUTES }}
+          BUDGET_LLM_INPUT_TOKENS: ${{ vars.BUDGET_LLM_INPUT_TOKENS }}
+          BUDGET_LLM_OUTPUT_TOKENS: ${{ vars.BUDGET_LLM_OUTPUT_TOKENS }}
+          BUDGET_GEOCODE_CALLS: ${{ vars.BUDGET_GEOCODE_CALLS }}
+          # Finish inside the grace period GitHub gives a cancelled run, with room
+          # to close browser sessions and hand the claims back.
+          WORKER_BUDGET_MS: "240000"
+          WORKER_LEASE_MS: "300000"
+          # Logged for correlation only. The runner does not read it.
+          WORKER_TRIGGER_JOB_ID: ${{ inputs.jobId }}

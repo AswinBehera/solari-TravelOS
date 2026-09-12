@@ -8,6 +8,18 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=../../.env src/dev.ts"
+  },
+  "dependencies": {
+    "@dt/db": "workspace:*",
+    "@samsara/core": "workspace:*",
+    "@samsara/kernel": "workspace:*",
+    "@samsara/refine": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.13",
+    "@types/node": "^22.10.0"
   }
 }

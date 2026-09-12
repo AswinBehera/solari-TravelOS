@@ -5,6 +5,9 @@ packages:
 
 allowBuilds:
   esbuild: true
+  # Cloudflare's own runtime binary. Its postinstall fetches the platform build;
+  # wrangler cannot run without it, and ADR-0014 put apps/api on Workers.
+  workerd: true
 
 minimumReleaseAgeExclude:
   - '@solarisdk/browser@0.1.4'

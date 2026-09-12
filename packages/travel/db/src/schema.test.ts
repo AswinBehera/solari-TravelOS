@@ -10,6 +10,8 @@ const ENGINE = [
   "budget_counters",
   "evidence",
   "harvest_runs",
+  "job_events",
+  "jobs",
   "mentions",
   "observations",
   "personas",

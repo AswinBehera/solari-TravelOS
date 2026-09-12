@@ -68,7 +68,11 @@ export const failure = (
 export function classify(thrown: unknown): Failure {
   const e = thrown instanceof Error ? thrown : new Error(String(thrown))
   const cause = `${e.name}: ${e.message}`
-  const code = (e as NodeJS.ErrnoException).code
+  // Structural rather than `NodeJS.ErrnoException`. `classify` is on the path the
+  // API takes, and the API compiles against the Workers runtime where the `NodeJS`
+  // namespace does not exist — a type-only import of it would make this whole file
+  // unusable above the seam for no benefit, since all we want is one string.
+  const code = (e as { code?: string }).code
   const status =
     (e as { status?: number; statusCode?: number }).status ??
     (e as { statusCode?: number }).statusCode

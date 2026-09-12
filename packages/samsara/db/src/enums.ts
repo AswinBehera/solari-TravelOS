@@ -3,6 +3,8 @@ import {
   budgetWindow,
   type HarvestOutcome,
   harvestOutcome,
+  type JobState,
+  jobState,
   type MeterId,
   meterId,
   type PersonaHealth,
@@ -51,6 +53,7 @@ export const harvestOutcomeEnum = pgEnum(
   "harvest_outcome",
   harvestOutcome.options as unknown as Values<HarvestOutcome>,
 )
+export const jobStateEnum = pgEnum("job_state", jobState.options as unknown as Values<JobState>)
 export const resolutionStateEnum = pgEnum(
   "resolution_state",
   resolutionState.options as unknown as Values<ResolutionState>,

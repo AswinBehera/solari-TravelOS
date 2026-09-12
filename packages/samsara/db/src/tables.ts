@@ -14,6 +14,7 @@ import { timestamps } from "./columns.js"
 import {
   budgetWindowEnum,
   harvestOutcomeEnum,
+  jobStateEnum,
   meterIdEnum,
   personaHealthEnum,
   personaTierEnum,
@@ -263,5 +264,80 @@ export const budgetCounters = pgTable(
     // Load-bearing, not an optimisation: the guard upserts against this constraint,
     // so two concurrent runners increment one row instead of racing to create two.
     uniqueIndex("budget_counters_meter_window_key_idx").on(t.meter, t.window, t.windowKey),
+  ],
+)
+
+/**
+ * The queue (ADR-0004, as amended by ADR-0014). Claimed with `FOR UPDATE SKIP
+ * LOCKED`; see `PostgresJobStore` in `@samsara/kernel/postgres` for the statement.
+ *
+ * Two columns here are doing work that is easy to mistake for bookkeeping.
+ * `lease_until` is what makes a cancelled runner recoverable without an operator:
+ * a scheduled Actions run can be killed between any two statements, and a `running`
+ * row with an expired lease is the *normal* residue of that, not an incident.
+ * `idempotency_key` is what stops a double-click from spending two sets of browser
+ * minutes on one piece of work — the unique index below is load-bearing, because
+ * the API relies on the insert conflicting rather than on checking first.
+ */
+export const jobs = pgTable(
+  "jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: text("type").notNull(),
+    /** Opaque pair with the pack's own tables; no foreign key, by the rule above. */
+    domainId: text("domain_id"),
+    ownerId: text("owner_id"),
+    payload: jsonb("payload").notNull().default({}),
+    idempotencyKey: text("idempotency_key"),
+    state: jobStateEnum("state").notNull().default("queued"),
+    priority: integer("priority").notNull().default(0),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(3),
+    runAfter: timestamp("run_after", { withTimezone: true }).notNull().defaultNow(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    claimedBy: text("claimed_by"),
+    lastError: text("last_error"),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [
+    // The claim query's index. Ordered to match its ORDER BY exactly, because the
+    // claim runs inside a transaction holding row locks and a sequential scan there
+    // is a lock held over the whole table.
+    index("jobs_claim_idx").on(t.state, t.priority, t.runAfter),
+    // Partial would be tighter, but drizzle-kit's `where` on unique indexes is the
+    // sharp edge here; a full unique index over a nullable column already gives
+    // Postgres' "nulls are distinct" behaviour, which is exactly what is wanted:
+    // keyed jobs collide, unkeyed ones never do.
+    uniqueIndex("jobs_idempotency_key_idx").on(t.idempotencyKey),
+  ],
+)
+
+/**
+ * Append-only progress (ADR-0016). The runner writes a row per state change; the
+ * API's SSE stream reads rows after a cursor.
+ *
+ * `seq` rather than a timestamp because the cursor must be exact: two events in the
+ * same millisecond are ordinary, and an SSE client that resumes from a time either
+ * replays an event or loses one. `note` is capped at 200 characters for the same
+ * reason the kernel's logger has no free-form field — this table is streamed to a
+ * browser out of a public repository.
+ */
+export const jobEvents = pgTable(
+  "job_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => jobs.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    state: jobStateEnum("state").notNull(),
+    note: text("note"),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // The stream's only query, and the reason it costs one round trip per tick.
+    uniqueIndex("job_events_job_seq_idx").on(t.jobId, t.seq),
   ],
 )

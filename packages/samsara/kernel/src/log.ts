@@ -57,6 +57,38 @@ export type KernelEvent = Base &
         ageMs: number
       }
     | {
+        event: "job.claimed"
+        jobId: string
+        /** The handler key, e.g. `harvest.run`. Never the payload. */
+        type: string
+        domainId: string | null
+        attempt: number
+        of: number
+      }
+    | {
+        event: "job.finished"
+        jobId: string
+        type: string
+        /** `succeeded`, `failed`, or `cancelled` — the row's terminal state. */
+        outcome: string
+        durationMs: number
+        attempts: number
+        /** Present only on failure, and only ever a class. */
+        kind: FailureKind | null
+        willRetry: boolean
+      }
+    | {
+        event: "runner.drained"
+        /** The Actions run that held the leases, for tracing a cancellation back. */
+        runId: string
+        claimed: number
+        succeeded: number
+        failed: number
+        /** Rows whose lease had expired and which this run took back. */
+        reclaimed: number
+        durationMs: number
+      }
+    | {
         event: "budget.refused"
         meter: MeterId
         window: string
@@ -93,12 +125,12 @@ export interface Logger {
   emit(event: KernelEvent): void
 }
 
-/** One JSON object per line on stdout — what GitHub Actions and `jq` both want. */
-export const jsonLogger: Logger = {
-  emit(event) {
-    process.stdout.write(`${JSON.stringify(event)}\n`)
-  },
-}
+// `jsonLogger` used to live here and now lives in `log.node.ts`, reachable as
+// `@samsara/kernel/node`. It was the only thing in this file that touched
+// `process`, and packages are source-only (no build step, P0.1), so its presence
+// made every module that imports a `Logger` uncompilable against the Workers
+// runtime — which `apps/api` is. The split is the same move as `./solari`: the
+// thing a runtime cannot load is reachable, but never on the default path.
 
 /** Collects events instead of printing them. For assertions in tests. */
 export class MemoryLogger implements Logger {

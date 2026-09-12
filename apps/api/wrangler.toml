@@ -1,0 +1,51 @@
+# apps/api on Cloudflare Workers, free plan (ADR-0014).
+#
+# The free plan's limit is **10 ms of CPU per invocation**, not wall clock, which
+# is why a handler here may hold an SSE stream open for fifteen minutes and still
+# fit. `cpu.test.ts` measures the CPU side of that in CI; the authoritative number
+# is the dashboard's, because a Worker cannot time itself from inside.
+name = "doen-thang-api"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# Needed because the dependency graph below this entrypoint reaches Node built-ins
+# (postgres-js in particular). It is not a licence to import `node:fs` in a
+# handler — the kernel's Node-only code lives behind `@samsara/kernel/node` and
+# this app deliberately imports `@samsara/kernel/jobs` and `/postgres` instead of
+# the barrel, so that the split stays a compile error rather than a deploy-time one.
+compatibility_flags = ["nodejs_compat"]
+
+# Postgres connection pooling. Workers has no long-lived process to hold a pool in,
+# so without this every request would open and tear down a connection.
+#
+# The number that constrains the design is not here: Hyperdrive's free plan allows
+# 100,000 queries a day **account-wide**. Every route is written against that
+# ceiling, and `stream.test.ts` asserts the SSE loop's share of it.
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+# `wrangler hyperdrive create doen-thang --connection-string=...` prints this.
+# Still a placeholder because no Cloudflare account has been created yet: the id
+# is issued by that command and cannot be invented. Nothing local needs it —
+# `wrangler dev` uses `localConnectionString` below — so this line is the first
+# thing that must change on deploy day, and the only one.
+id = "REPLACE_WITH_HYPERDRIVE_ID"
+# Dev only: `wrangler dev` connects straight to the local docker-compose Postgres
+# instead of standing up a real Hyperdrive. Committed on purpose — these are the
+# throwaway credentials from `docker-compose.yml`, and a dev setup that needs a
+# secret before it will start is a dev setup people work around.
+localConnectionString = "postgres://postgres:postgres@localhost:5432/doen_thang"
+
+[vars]
+# Public, non-secret configuration only. Everything with a key in it is a secret
+# (`wrangler secret put NAME`) and appears in `src/env.ts`, never here:
+#   SUPABASE_URL, GITHUB_TOKEN
+GITHUB_REPOSITORY = "AswinBehera/solari-TravelOS"
+GITHUB_WORKFLOW = "worker.yml"
+GITHUB_REF = "main"
+
+[observability]
+enabled = true
+# The default is 100%. The free plan's daily log ceiling is small enough that a
+# noisy deploy can exhaust it and lose the events that mattered, so keep the
+# handlers quiet rather than sampling away the ones that are left.
+head_sampling_rate = 1

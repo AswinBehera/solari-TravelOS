@@ -1,4 +1,16 @@
 {
   "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // This app compiles against the Workers runtime, not Node's. The two disagree
+    // about enough (no `process`, a different `fetch`, `ExecutionContext`) that
+    // typechecking it as Node would let genuinely broken code through.
+    "types": ["@cloudflare/workers-types"]
+  },
+  // The tests are excluded here and typechecked by `tsconfig.test.json` instead,
+  // because they run in Node and Node is where they have to run: measuring CPU
+  // requires `process.cpuUsage()`, and Workers has no `process` — deliberately, and
+  // for the same reason it freezes its own clocks. Two configs is the honest way to
+  // say that the source and its tests execute in two different runtimes.
+  "exclude": ["src/**/*.test.ts"],
   "include": ["src"]
 }

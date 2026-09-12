@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Node, not Workers. See the note in `tsconfig.json`.
+    "types": ["node"]
+  },
+  "include": ["src/**/*.test.ts"]
+}
