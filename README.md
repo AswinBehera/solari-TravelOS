@@ -130,11 +130,44 @@ Requires Node 22+, pnpm 11, and Docker.
 pnpm install
 cp .env.example .env        # then fill in SOLARI_API_KEY
 pnpm db:up && pnpm db:migrate && pnpm db:seed
-pnpm check                  # lint, typecheck, test
+pnpm check                  # lint, typecheck, seam, test
 ```
 
 `pnpm check` spends nothing and needs no API key: the kernel talks to
 `BrowserLauncher`/`SandboxLauncher` interfaces, and the tests supply fakes.
+
+One of those steps is unusual enough to name. `pnpm check:seam` enforces the
+claim the whole architecture rests on — that `packages/samsara/**` does not know
+it is about travel (ADR-0009). It fails on travel vocabulary, on an engine
+package that declares or imports anything under `@dt/*`, and it counts every
+`// seam:allow <reason>` escape hatch. Above five allows the seam is in the wrong
+place and gets redesigned rather than extended. It currently uses **zero**.
+
+To run all three deployables with hot reload:
+
+```bash
+pnpm dev
+```
+
+| | | |
+|---|---|---|
+| web | http://localhost:5173 | Vite, HMR. Proxies `/api/*` to the API, so dev and production agree about origin. |
+| api | http://localhost:8788 | `wrangler dev` on the real Workers runtime, not a Node emulation. |
+| worker | — | Wakes, drains, exits, sleeps 3s, repeats. `tsx watch` restarts it on save. |
+
+Three things about that worth knowing before they surprise you:
+
+- **The API runs on workerd**, so a Node-only import fails here exactly as it would in
+  production, rather than at deploy time.
+- **The worker is on a timer, not a daemon.** Production has no long-lived worker
+  (ADR-0014): Actions wakes a runner, it drains, it exits. Dev reproduces that shape
+  deliberately — a persistent dev worker would hide every bug that only appears because
+  the process ends between jobs.
+- **The API reaches Postgres through Hyperdrive's local connection string**, pointed at
+  the docker-compose database. No Cloudflare account is needed to develop.
+
+`SUPABASE_URL` is only required once a request actually authenticates, so `pnpm dev`
+works on a clean checkout with nothing but Docker running.
 
 One test does spend money, and it is skipped unless you ask for it:
 
