@@ -124,7 +124,7 @@ platform alone, `packages/samsara/` leaves as a `git filter-repo` rather than a 
 
 ## Running it
 
-Requires Node 22+, pnpm 11, and Docker.
+Requires Node 22.9+, pnpm 11, and Docker.
 
 ```bash
 pnpm install
@@ -135,6 +135,14 @@ pnpm check                  # lint, typecheck, seam, test
 
 `pnpm check` spends nothing and needs no API key: the kernel talks to
 `BrowserLauncher`/`SandboxLauncher` interfaces, and the tests supply fakes.
+
+It does need the database, though, and it says so rather than working around it.
+The queue's `FOR UPDATE SKIP LOCKED` tests are the only ones that can check the
+property everything else rests on — two runners never claim the same row — so if
+`DATABASE_URL` is unset they **fail** rather than skipping. `pnpm test` loads `.env`
+for you, which is why the Node floor is 22.9. If you genuinely want to run without
+Docker, say so: `SAMSARA_NO_DB=1 pnpm check`. The escape hatch exists; it just has
+to be visible, the same bargain `// seam:allow` strikes below.
 
 One of those steps is unusual enough to name. `pnpm check:seam` enforces the
 claim the whole architecture rests on — that `packages/samsara/**` does not know

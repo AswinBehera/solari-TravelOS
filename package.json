@@ -5,12 +5,12 @@
   "type": "module",
   "packageManager": "pnpm@11.22.0",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.9"
   },
   "scripts": {
     "dev": "pnpm db:up && turbo run dev",
     "typecheck": "tsc -p tools/tsconfig.json && turbo run typecheck",
-    "test": "turbo run test",
+    "test": "node --env-file-if-exists=.env node_modules/turbo/bin/turbo run test",
     "lint": "biome check .",
     "format": "biome check --write .",
     "check": "pnpm lint && pnpm typecheck && turbo run check:seam test:tools && pnpm test",

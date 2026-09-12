@@ -16,12 +16,37 @@ import { PostgresJobStore } from "./stores/postgres.js"
  * single assumption everything else here rests on. A fake that runs one statement
  * at a time cannot fail that test, which means it cannot pass it either.
  *
- * Skipped unless `DATABASE_URL` is set, so `pnpm test` stays runnable on a machine
- * with no Docker. CI sets it; the developer runs `pnpm db:up` first.
+ * Runs whenever `DATABASE_URL` is set, and **fails loudly when it is not** unless
+ * `SAMSARA_NO_DB=1` says the omission is deliberate.
+ *
+ * The earlier version of this comment said "skipped unless `DATABASE_URL` is set,
+ * so `pnpm test` stays runnable on a machine with no Docker", and that was the
+ * second time the same mistake was made here. The first was Turbo's strict env
+ * mode swallowing the variable (P0.7); this was P0.8's fresh-clone run, where
+ * following the README exactly produced `67 passed | 14 skipped`, exit 0, and no
+ * coverage at all of the one component with real concurrency in it. Fixing the
+ * plumbing is not enough: a silent skip is a green run that means nothing, and the
+ * only durable fix is to make the absence an event. Opting out is still allowed —
+ * it just has to be said out loud, which is the same bargain the seam checker's
+ * allow comments strike. (Writing that marker literally here made the checker fail
+ * this very file for an unused allow, which is the check being right.)
  */
 
 const url = process.env.DATABASE_URL
 const hasDb = typeof url === "string" && url.length > 0
+const optedOut = process.env.SAMSARA_NO_DB === "1"
+
+if (!hasDb && !optedOut) {
+  describe("the queue, against Postgres", () => {
+    it("has a database to run against", () => {
+      expect.fail(
+        "DATABASE_URL is not set, so the FOR UPDATE SKIP LOCKED tests would have " +
+          "skipped and this run would have reported green while testing nothing. " +
+          "Run `pnpm db:up` and retry, or set SAMSARA_NO_DB=1 to skip on purpose.",
+      )
+    })
+  })
+}
 
 const client = hasDb ? postgres(url as string, { max: 4 }) : undefined
 const db = client ? drizzle(client, { schema: samsaraSchema }) : undefined

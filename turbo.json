@@ -14,7 +14,12 @@
       // `DATABASE_URL` never reaches vitest, the 13 Postgres tests skip themselves,
       // and the run still reports green — which is exactly how CI would have
       // claimed to test the one component with real concurrency in it.
-      "env": ["DATABASE_URL", "SOLARI_LIVE"]
+      //
+      // P0.8 found the layer above this one leaking the same way: turbo passes the
+      // variable through, but nothing put it in turbo's own environment, because
+      // nothing loads `.env`. The root `test` script does that now. `SAMSARA_NO_DB`
+      // is the declared opt-out — see `jobs.pg.test.ts`.
+      "env": ["DATABASE_URL", "SOLARI_LIVE", "SAMSARA_NO_DB"]
     },
     "dev": {
       "cache": false,
