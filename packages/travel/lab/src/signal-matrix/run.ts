@@ -5,10 +5,9 @@ import { samsaraSchema } from "@samsara/db"
 import {
   BudgetGuard,
   Kernel,
-  type KernelEvent,
-  type Logger,
   loadCeilings,
   SessionRegistry,
+  type SessionSpend,
 } from "@samsara/kernel"
 import { jsonLogger } from "@samsara/kernel/node"
 import { PostgresCounterStore, PostgresSessionStore } from "@samsara/kernel/postgres"
@@ -39,37 +38,35 @@ const noReplicates = args.has("--no-replicates")
 const seedArg = process.argv.find((a) => a.startsWith("--seed="))
 const seed = seedArg ? Number(seedArg.slice("--seed=".length)) : 20260912
 
-type SessionClose = Extract<KernelEvent, { event: "session.close" }>
-
 /**
- * Prints every kernel event and keeps the closes for the cell in flight.
+ * What one cell cost, summed from the kernel's own `onSession` reports.
  *
- * **Sums them.** A cell that fails and retries closes twice, and the first close
- * is a real session that really consumed minutes — the budget guard meters it,
- * because the guard meters measurement rather than success. Reading only the last
- * close attributed 3.25 minutes to a run that had actually spent 4.79, which is
- * the wrong direction for a number whose whole job is to be trusted against a
- * hard ceiling. The first run of this experiment found it by disagreeing with
- * `budget_counters`.
+ * **Summed, not last-wins.** A cell that fails and retries opens two sessions, and
+ * the first is a real session that really consumed minutes — the budget guard
+ * meters it, because the guard meters measurement rather than success. The first
+ * run of this experiment read only the last one and attributed 3.25 minutes to a
+ * run that had actually spent 4.79: a **32% under-report**, in the cheap-looking
+ * direction, for a number whose entire job is to be trusted against a hard ceiling.
+ * It was caught by disagreeing with `budget_counters`, which is luck.
+ *
+ * This used to be a `TeeLogger` that scraped `session.close` events out of the log
+ * stream on their way to stdout. That class is gone: `withBrowser` now reports each
+ * attempt's spend directly (`onSession`), which exists precisely because two
+ * callers in a row needed this number and the scraper got it wrong. The array is
+ * per-cell and never outlives the cell, so the old "read and clear" step — the one
+ * that had to be called twice per iteration, once defensively — is not merely
+ * unnecessary but unwritable.
  */
-class TeeLogger implements Logger {
-  #closes: SessionClose[] = []
-
-  emit(event: KernelEvent): void {
-    if (event.event === "session.close") this.#closes.push(event)
-    jsonLogger.emit(event)
-  }
-
-  /** Reads and clears, so one cell is never charged another cell's minutes. */
-  takeCell(): { sessionId: string | null; minutes: number; attempts: number } {
-    const closes = this.#closes
-    this.#closes = []
-    return {
-      // The last one is the attempt that produced the items.
-      sessionId: closes[closes.length - 1]?.sessionId ?? null,
-      minutes: closes.reduce((sum, close) => sum + close.minutes, 0),
-      attempts: closes.length,
-    }
+function tally(spends: readonly SessionSpend[]): {
+  sessionId: string | null
+  minutes: number
+  attempts: number
+} {
+  return {
+    // The last attempt is the one that produced the items.
+    sessionId: spends[spends.length - 1]?.sessionId ?? null,
+    minutes: spends.reduce((sum, spend) => sum + spend.minutes, 0),
+    attempts: spends.length,
   }
 }
 
@@ -112,10 +109,10 @@ async function main(): Promise<void> {
 
   const client = postgres(dbUrl, { max: 4 })
   const db = drizzle(client, { schema: samsaraSchema })
-  // Prints every event as the kernel emits it — the run is ten minutes long and
-  // a silent one is a run nobody can tell has stalled — and keeps the last close
-  // so the per-cell minutes land in the results file next to the cell they paid for.
-  const logger = new TeeLogger()
+  // Prints every event as the kernel emits it: the run is ten minutes long, and a
+  // silent one is a run nobody can tell has stalled. Per-cell accounting no longer
+  // rides on this stream — see `tally`.
+  const logger = jsonLogger
   const kernel = new Kernel({
     registry: new SessionRegistry(new PostgresSessionStore(db), logger),
     guard: new BudgetGuard({ store: new PostgresCounterStore(db), ceilings: loadCeilings() }),
@@ -135,7 +132,7 @@ async function main(): Promise<void> {
     seen.set(key, replicate + 1)
 
     const cellStartedAt = new Date().toISOString()
-    logger.takeCell()
+    const spends: SessionSpend[] = []
 
     const result = await kernel.withBrowser(
       "harvest",
@@ -145,6 +142,7 @@ async function main(): Promise<void> {
         timezoneId: request.timezoneId,
         deadlineMs: 90_000,
         attempts: 2,
+        onSession: (spend) => spends.push(spend),
       },
       async (page) => {
         const p = page as PageLike
@@ -155,7 +153,7 @@ async function main(): Promise<void> {
 
     // Metered by the kernel whether the cell succeeded or not, and summed across
     // retries, which is the number that matters against the ceiling.
-    const { sessionId, minutes, attempts } = logger.takeCell()
+    const { sessionId, minutes, attempts } = tally(spends)
     minutesSpent += minutes
 
     cells.push(
