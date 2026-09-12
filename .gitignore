@@ -14,3 +14,6 @@ dist/
 .turbo/
 *.tsbuildinfo
 coverage/
+
+# wrangler dev local state (workerd cache, local D1/KV/Hyperdrive shims)
+.wrangler/

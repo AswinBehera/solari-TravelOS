@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // `vite.config.ts` runs in Node, not in the browser. Same reason `apps/api` has
+    // two configs: one file, one runtime, and saying so beats a union of both.
+    "types": ["node"]
+  },
+  "include": ["vite.config.ts"]
+}
