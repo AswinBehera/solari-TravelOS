@@ -429,6 +429,15 @@ Tasks:
   Budget: 16 cells x ~0.5 minutes, under 10 browser-minutes, well inside the per-task 30-minute cap.
   Do this **before** P1.3 to P1.6, so the adapters are built against measured signal weights rather
   than assumed ones.
+  *Designed 12 September 2026 and corrected in four ways while being designed: the sixteen cells
+  carry two replicates, because without a repeated cell the table cannot tell a signal from the
+  surface's own minute-to-minute drift; the replicates are forced to span the whole run rather than
+  sit next to their originals, so the noise floor is measured over the same timescale as the
+  contrasts it calibrates; the run order is shuffled from a recorded seed, so ten minutes of drift
+  does not land on the slowest-varying factor and get reported as its effect; and overlap divides by
+  what could have been shared rather than by k, so a thin page is not read as a changed one.
+  Eighteen sessions, ~9.0 minutes. The arithmetic is in `@samsara/harvest`, the query strings and
+  the surface in `@dt/lab`, and the whole zero-cost half is tested with no network.*
 - **P1.1** `@samsara/personas`: create persona (row + optional Solari profile + sticky proxy session key), health state machine, `keepalive` job (launch, visit two neutral local pages, save profile, update lastAliveAt). Ban detection heuristic: consecutive `Blocked` results flip health to `degraded`, three in a row to `banned`.
 - **P1.2** `@samsara/sources` adapter interface: `harvest(ctx, query): Promise<RawItem[]>` where ctx carries persona, page, logger. Plus `@samsara/harvest`: run orchestration (persona x source x query), rate limiting, `HarvestRun` rows. Fixture-based tests for parsers, separated from fetching. **The adapter interface takes a query string and returns RawItems. It does not know what the caller will do with them.**
 - **P1.3** Adapter: **YouTube regional trending + search** (logged-out, region param). Most stable target; proves the shape.
@@ -655,7 +664,7 @@ Unit economics sanity check to run at Phase 6: cost per active user per month vs
 
 ```
 P0.1 P0.2 P0.3 P0.4 P0.5 P0.6 P0.7 P0.8
-P1.1 P1.2 P1.3 P1.4 P1.5 P1.6 P1.7 P1.8
+P1.0 P1.1 P1.2 P1.3 P1.4 P1.5 P1.6 P1.7 P1.8
 P2.1 P2.2 P2.3 P2.4 P2.5 P2.6 P2.7 P2.8
 P3.1 P3.2 P3.3 P3.4 P3.5 P3.6
 P4.1 P4.2 P4.3 P4.4 P4.5 P4.6 P4.7 P4.8 P4.9

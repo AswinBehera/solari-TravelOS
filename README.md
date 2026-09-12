@@ -68,6 +68,7 @@ packages/samsara/     the service layer — no travel vocabulary appears here
   personas/ sources/ harvest/ refine/ eyes/ llm/
 packages/travel/      @dt/* — the travel vertical
   core/ db/ travel-pack/ ui/
+  lab/                the Persona Lab's experiments — designs, runners, results
 apps/
   web/                React + Vite. The document.
   api/                Hono. Thin: auth, rows, SSE.

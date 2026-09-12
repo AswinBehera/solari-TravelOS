@@ -1,7 +1,18 @@
 # STATUS
 
-Phase: 0 — **complete, pending the gate.**
-Last completed: **P0.8** (the acceptance run): Phase 0's own three acceptance criteria executed
+Phase: 1 — in progress. Phase 0 is **complete, pending the gate** (below; the gate is a human
+review and does not block buildable work).
+Last completed: **P1.0, the zero-cost half.** The signal-matrix experiment is designed, built and
+tested without opening a single session: the factorial machinery, pairwise overlap, factor effects,
+noise floor and seeded run order live in `@samsara/harvest` (29 tests, no network); the two query
+strings, the locale-to-clock map, the region hints and the YouTube surface live in a new `@dt/lab`
+package (15 tests). Writing the design down found four flaws in the plan's one-sentence version of
+the experiment, none of which needed a session to discover — see
+`casestudy_and_thinking/sessions/2026-09-12-p10-designing-the-experiment.md`. **The live run is
+built and priced but not executed: 18 sessions, ~9.0 browser-minutes of 4,000, awaiting a
+decision.** `pnpm --filter @dt/lab signal-matrix:plan` prints every cell in execution order and
+opens nothing.
+Before that: **P0.8** (the acceptance run): Phase 0's own three acceptance criteria executed
 literally for the first time. Criterion 3 held. **Criteria 1 and 2 were both false and had been
 for days, with no symptoms.** A fresh clone following the README produced `67 passed | 14
 skipped`, exit 0, testing none of the job store; and the `@live` test had never written a
@@ -14,7 +25,8 @@ allows of five**. A third finding fell out of the live run — `Asia/Ho_Chi_Minh
 viewpoint check was reporting a false negative. Before that, **P0.7** (the seam check),
 **P0.6** (dev ergonomics) and **P0.5** (the queue and the two runtimes); all three were
 committed this session, having lived only in the working tree until now.
-NEXT: **the Phase 0 gate** (see below), then P1.0.
+NEXT: **approve or decline the P1.0 live run** (9 minutes, see above), and **the Phase 0
+gate** (see below). P1.1 is buildable in parallel with either.
 Branch: main
 Known breakage: none. (The 0003/0004 gap from last session is closed — Docker was started, all six
 migrations are recorded, and `places.external_ref`/`resolved_tier` are live.)
@@ -450,6 +462,39 @@ Open for architect before P0.8:
   a case asserting a bounded query count for a stream held open across a real harvest.
 
 ---
+
+## The P1.0 live run — priced, not spent
+
+Everything is built. The run is one command and nobody has approved it yet, which is the point.
+
+```
+pnpm --filter @dt/lab signal-matrix:plan   # prints all 18 cells, opens nothing
+pnpm --filter @dt/lab signal-matrix:run    # spends ~9 browser-minutes
+pnpm --filter @dt/lab signal-matrix:report # reads the results file, prints the table
+```
+
+| | |
+|---|---|
+| Sessions | 18 (16 design cells + 2 replicates) |
+| Estimated cost | **~9.0 browser-minutes of 4,000** — 0.225% of the ceiling |
+| Spent to date | 0.105 minutes |
+| Surface | YouTube search, logged out, top 20 |
+| Run order | shuffled, seed `20260912`, recorded in the results file |
+| Counters | the real Postgres ones; the run refuses to start without `DATABASE_URL` |
+| Output | a JSON results file in `packages/travel/lab/results/`, read by a network-free reporter |
+
+Three things to know before deciding:
+
+1. **Nine minutes, not eight.** The plan budgeted sixteen cells. Two of them run twice, because a
+   design with no repeated cell cannot distinguish a signal from the surface's own drift, and the
+   whole table would be unreadable without that control.
+2. **The answer will be YouTube's answer.** One surface, one query, one day. The `Surface`
+   interface exists so a second surface costs a file rather than a rewrite, but the first table
+   should not be read as a general law.
+3. **It may come back refused.** A consent wall or captcha on some cells is a live possibility.
+   Those cells are excluded from the averages and printed by name rather than folded in as zero
+   overlap — a block and a working signal look identical in a set intersection, and that is the one
+   confusion that would invalidate the conclusion.
 
 ## The Phase 0 gate
 

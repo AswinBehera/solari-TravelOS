@@ -188,6 +188,31 @@ importers:
         specifier: ^4.23.13
         version: 4.23.13
 
+  packages/travel/lab:
+    dependencies:
+      '@samsara/db':
+        specifier: workspace:*
+        version: link:../../samsara/db
+      '@samsara/harvest':
+        specifier: workspace:*
+        version: link:../../samsara/harvest
+      '@samsara/kernel':
+        specifier: workspace:*
+        version: link:../../samsara/kernel
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@cloudflare/workers-types@4.20260702.1)(postgres@3.4.9)
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.2
+        version: 22.20.2
+      tsx:
+        specifier: ^4.23.13
+        version: 4.23.13
+
   packages/travel/pack: {}
 
   packages/travel/ui: {}
