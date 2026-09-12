@@ -123,7 +123,27 @@ importers:
         specifier: ^0.45.2
         version: 0.45.2(@cloudflare/workers-types@4.20260702.1)(postgres@3.4.9)
 
-  packages/samsara/harvest: {}
+  packages/samsara/harvest:
+    dependencies:
+      '@samsara/core':
+        specifier: workspace:*
+        version: link:../core
+      '@samsara/db':
+        specifier: workspace:*
+        version: link:../db
+      '@samsara/kernel':
+        specifier: workspace:*
+        version: link:../kernel
+      '@samsara/sources':
+        specifier: workspace:*
+        version: link:../sources
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@cloudflare/workers-types@4.20260702.1)(postgres@3.4.9)
+    devDependencies:
+      postgres:
+        specifier: ^3.4.9
+        version: 3.4.9
 
   packages/samsara/kernel:
     dependencies:
@@ -175,7 +195,14 @@ importers:
 
   packages/samsara/refine: {}
 
-  packages/samsara/sources: {}
+  packages/samsara/sources:
+    dependencies:
+      '@samsara/core':
+        specifier: workspace:*
+        version: link:../core
+      '@samsara/kernel':
+        specifier: workspace:*
+        version: link:../kernel
 
   packages/travel/core:
     dependencies:

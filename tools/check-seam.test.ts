@@ -204,4 +204,34 @@ describe("dependency direction", () => {
     })
     expect(checkSeam(dir).badImports).toEqual([])
   })
+  it("sees a city name written in Thai, which segmentation erases", () => {
+    // The regression this tier exists for. `segments` splits on [^A-Za-z0-9]+, so
+    // before FORBIDDEN_SUBSTRINGS this line scanned as an empty list of words and
+    // the file passed clean — a banned proper noun, in the tier scanned everywhere.
+    const dir = fixtureTree({
+      "packages/samsara/fake/package.json": JSON.stringify({ name: "@samsara/fake" }),
+      "packages/samsara/fake/src/index.ts": 'export const q = "ที่เที่ยวกรุงเทพ"\n',
+    })
+    const report = checkSeam(dir)
+    expect(report.hits).toHaveLength(1)
+    expect(report.hits[0]?.term).toBe("กรุงเทพ")
+  })
+
+  it("sees the Vietnamese spelling whatever its case", () => {
+    const dir = fixtureTree({
+      "packages/samsara/fake/package.json": JSON.stringify({ name: "@samsara/fake" }),
+      "packages/samsara/fake/src/index.ts": "// the plan starts in Hà Nội\nexport const x = 1\n",
+    })
+    expect(checkSeam(dir).hits.map((h) => h.term)).toEqual(["hà nội"])
+  })
+
+  it("leaves ordinary non-Latin text alone", () => {
+    // The tier must not become "any Thai string is suspicious". A greeting is not
+    // domain vocabulary, and an engine test is allowed to prove UTF-8 survives.
+    const dir = fixtureTree({
+      "packages/samsara/fake/package.json": JSON.stringify({ name: "@samsara/fake" }),
+      "packages/samsara/fake/src/index.ts": 'export const q = "สวัสดีชาวโลก"\n',
+    })
+    expect(checkSeam(dir).hits).toEqual([])
+  })
 })

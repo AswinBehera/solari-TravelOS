@@ -467,6 +467,33 @@ Tasks:
   migration `0006_persona_timezone`. 54 tests, **0 browser minutes spent**, seam allowances still
   0 of 5. See `casestudy_and_thinking/sessions/2026-09-12-p11-the-identity.md`.
 - **P1.2** `@samsara/sources` adapter interface: `harvest(ctx, query): Promise<RawItem[]>` where ctx carries persona, page, logger. Plus `@samsara/harvest`: run orchestration (persona x source x query), rate limiting, `HarvestRun` rows. Fixture-based tests for parsers, separated from fetching. **The adapter interface takes a query string and returns RawItems. It does not know what the caller will do with them.**
+  ✅ **Done.** Four departures from the line above.
+  (1) **The adapter is two methods, not one.** `capture(ctx, query)` spends; `parse(capture)` does
+  not. `parse` is synchronous and receives a `Capture`, never a context — no page, no signal, no
+  clock — so an adapter *physically cannot* fetch while parsing. The plan's own justification for
+  this phase ("parser iteration opens no browsers … the single largest saving available") is not
+  deliverable by a single `harvest()`, which permits the separation without creating it. The
+  convenience wrapper `harvest(adapter, ctx, query)` remains, for callers who want both halves.
+  (2) **`parse` returns `ItemDraft`, not `RawItem`.** No `id`, no `harvestRunId`, no `rawRef`, no
+  `capturedAt`. A parser that minted ids would produce different rows on every re-parse of the
+  same archived capture, converting the re-parse saving into a duplicate-insert problem. The
+  parser reports what the page said; `runHarvest` decides what the row is.
+  (3) **A refusal is carried, not thrown.** `Capture.refusedBy` keeps the consent wall / captcha /
+  empty-200 body as evidence; `runHarvest` converts it to `Blocked` inside the kernel callback so
+  `classify` sees it and `retry.ts` declines to retry. (4) **An archive failure is fatal to the
+  run.** First written as non-fatal; a test caught the result — a run marked `ok` with zero items
+  behind it. An item without a `rawRef` looks like evidence and can never be re-read. Accepted
+  cost: a bucket outage re-spends browser minutes on retry.
+  Also: `MemoryPacer` (per-source minimum interval, slot reserved before the sleep, honest about
+  not spanning a process exit), three storage ports (`HarvestRunStore`, `RawItemStore`,
+  `CaptureArchive`) rather than one, and a third tier in `tools/check-seam.ts` —
+  `FORBIDDEN_SUBSTRINGS` — after `"ที่เที่ยวกรุงเทพ"` passed a green seam check because
+  `segments()` erases every script it cannot spell. 43 new tests, **0 browser minutes spent**,
+  seam allowances still 0 of 5 across 92 files.
+  **Not done here, deliberately:** no `harvest.run` job type is registered in `apps/worker`.
+  `runHarvest` takes an adapter, and there is no adapter until P1.3; a registry with no entries
+  would be a job type that always fails. Wiring lands with the first real source.
+  See `casestudy_and_thinking/sessions/2026-09-12-p12-the-split-and-the-blind-checker.md`.
 - **P1.3** Adapter: **YouTube regional trending + search** (logged-out, region param). Most stable target; proves the shape.
 - **P1.4** Adapter: **TikTok logged-out search/discover** with stealth + the P1.0 viewpoint (Thai query, `th-TH` locale, `Asia/Bangkok`, `sg` egress — there is no `th` egress, see ADR-0015). TikTok is the surface most likely to gate on IP geolocation, so this is where the gap shows up if it shows up; report it as a gap rather than working around it. Two strategies: rendered page scrape, then intercepted XHR JSON. Record sessions for first 20 runs.
 - **P1.5** Adapter: **Google Maps reviews** for a caller-supplied list of areas; Phase 1 runs it on Thai-language areas (Ari, Charoenkrung, Talat Noi, Yaowarat), but the area list is a parameter, not a constant in the adapter. Extract review text in native script, reviewer language.

@@ -2,7 +2,45 @@
 
 Phase: 1 — in progress. Phase 0 is **complete, pending the gate** (below; the gate is a human
 review and does not block buildable work).
-Last completed: **P1.1 — `@samsara/personas`.** The identity package: create, health state
+Last completed: **P1.2 — `@samsara/sources` + `@samsara/harvest`.** The adapter contract and the
+orchestration around it. 43 new tests, **zero browser minutes spent** building either, seam
+allowances still **0 of 5** across 92 files.
+
+The shape that matters: **the adapter is two methods, and the split is a type rather than a
+convention.** `capture(ctx, query)` spends browser minutes; `parse(capture)` is synchronous and is
+handed only bytes — no page, no signal, no clock — so an adapter cannot fetch while parsing even
+by accident. The plan's justification for this whole phase ("parser iteration opens no browsers …
+the single largest saving available") is not deliverable by the single `harvest()` the plan
+specified: that signature *permits* the separation without creating it. The stored fixture is a
+recorded `Capture`, byte for byte identical to what the archive holds, so a parser test and a
+re-parse of a real run execute the same code on the same bytes and cannot drift apart.
+
+Two findings from the session:
+
+**One design bug, mine, caught by a test.** An archive failure was first written as non-fatal:
+log it, skip the items, carry on. That produced a run marked `ok` with zero items behind it —
+forty items parsed, nothing written, a `harvest_runs` row that reads like a good day. Archive
+failure is now fatal to the run. An item with no `rawRef` looks like evidence and can never be
+re-read when the extraction model changes; a loud outage that re-spends minutes beats a quiet
+corruption that does not.
+
+**The seam checker was blind in both of the languages this product is for.** `"ที่เที่ยวกรุงเทพ"`
+sat in an engine test through a green `check:seam` — `กรุงเทพ` is Bangkok, which is in the tier
+scanned *everywhere*. `segments()` splits on `[^A-Za-z0-9]+`, so Thai text is erased before the
+comparison rather than failing it; Vietnamese breaks into `kh`, `ch`, `s`, `n`. Caught by a human
+reading a diff, which is the failure mode the file exists to eliminate. Fixed with a third tier,
+`FORBIDDEN_SUBSTRINGS`, matched as lowercased substrings because Thai has no word boundaries to
+match on, plus three regression tests — one of them asserting an ordinary Thai greeting still
+passes, so the tier does not degrade into "non-Latin text is suspicious". The general form is
+worth keeping: **every mechanical guard has an undocumented domain of applicability, and the leak
+goes exactly there.**
+
+No `harvest.run` job type is registered in `apps/worker`, deliberately: `runHarvest` takes an
+adapter and there is none until P1.3, so a registry with no entries would be a job type that
+always fails. Wiring lands with the first real source. See
+`casestudy_and_thinking/sessions/2026-09-12-p12-the-split-and-the-blind-checker.md`.
+
+Before that: **P1.1 — `@samsara/personas`.** The identity package: create, health state
 machine, ban detection, `keepalive`. 54 tests, **zero browser minutes spent** building it, seam
 allowances still **0 of 5** across 82 files.
 
@@ -69,13 +107,15 @@ allows of five**. A third finding fell out of the live run — `Asia/Ho_Chi_Minh
 viewpoint check was reporting a false negative. Before that, **P0.7** (the seam check),
 **P0.6** (dev ergonomics) and **P0.5** (the queue and the two runtimes); all three were
 committed this session, having lived only in the working tree until now.
-NEXT: **P1.2** (`@samsara/sources` adapter interface + `@samsara/harvest` run orchestration), and
-**the Phase 0 gate** (see below), whose fourth question — P1.0 measured the signal stack and it
-does not match ADR-0015's ordering — is still open. Gate question 1 (`Viewpoint`'s shape) is now
-partly answered in code: it is `{country, locale, timezoneId}`, stored on the persona row.
-Still an architect's call before P1.2: `jobs.pg.test.ts` and `personas.pg.test.ts` both TRUNCATE
-the same database `pnpm dev` drains. Harmless today because the dev data is disposable; it stops
-being harmless the first time it is not.
+NEXT: **P1.3** — the YouTube adapter, the first real `SourceAdapter`, which also brings the
+`harvest.run` job wiring and forces the `CaptureArchive` decision (no Supabase credentials yet, so
+that choice is live). And **the Phase 0 gate** (see below), whose fourth question — P1.0 measured
+the signal stack and it does not match ADR-0015's ordering — is still open. Gate question 1
+(`Viewpoint`'s shape) is now answered in code: `{country, locale, timezoneId}`, stored on the
+persona row and read straight through by `CapturePersona`.
+Still an architect's call: `jobs.pg.test.ts`, `personas.pg.test.ts` and now `harvest.pg.test.ts`
+all TRUNCATE the same database `pnpm dev` drains. Harmless today because the dev data is
+disposable; it stops being harmless the first time it is not.
 Branch: main
 Known breakage: none. (The 0003/0004 gap from last session is closed — Docker was started, all six
 migrations are recorded, and `places.external_ref`/`resolved_tier` are live.)

@@ -60,9 +60,41 @@ export const FORBIDDEN_ANYWHERE = [
  * literals only: as identifiers they name domain concepts, as prose they are just
  * words ("a round trip", "mid-flight", "in one place").
  */
-export const FORBIDDEN_IN_CODE = ["travel", "trip", "place", "flight", "booking"] as const
+export const FORBIDDEN_IN_CODE = ["travel", "trip", "place", "flight", "booking"]
 
-export const FORBIDDEN = [...FORBIDDEN_ANYWHERE, ...FORBIDDEN_IN_CODE] as const
+/**
+ * The same unambiguous terms, in the scripts the people in this market actually
+ * type — and which `segments` cannot see.
+ *
+ * `segments` splits on `[^A-Za-z0-9]+`, so every Thai character is a separator and
+ * a Thai string is erased entirely before any comparison happens. Vietnamese fares
+ * no better: `khách sạn` breaks into `kh`, `ch`, `s`, `n`. That is not a rounding
+ * error. The string `ที่เที่ยวกรุงเทพ` — which ends in the name of a city —
+ * sat in an engine test through a green `check:seam`, in the tier that is supposed
+ * to be scanned everywhere, invisible to the checker whose whole job is that word.
+ * It was caught by a person reading the line, which is the failure mode this file
+ * exists to prevent.
+ *
+ * Matched as plain substrings against the raw line rather than as segments, because
+ * Thai is written without spaces and there are no boundaries to match on. A
+ * substring rule would be far too blunt for English; for a term that cannot appear
+ * in these files by accident, it is exactly right.
+ */
+export const FORBIDDEN_SUBSTRINGS = [
+  "กรุงเทพ", // bangkok
+  "โตเกียว", // tokyo
+  "โรงแรม", // hotel
+  "ร้านอาหาร", // restaurant
+  "hà nội", // hanoi
+  "khách sạn", // hotel
+  "nhà hàng", // restaurant
+]
+
+export const FORBIDDEN = [
+  ...FORBIDDEN_ANYWHERE,
+  ...FORBIDDEN_IN_CODE,
+  ...FORBIDDEN_SUBSTRINGS,
+] as const
 
 /** ADR-0009: above this, the seam is wrong and gets redesigned, not extended. */
 export const MAX_ALLOWS = 5
@@ -252,6 +284,10 @@ export function scanSource(
     const found: string[] = []
     for (const term of FORBIDDEN_ANYWHERE) if (anywhere.has(term)) found.push(term)
     for (const term of FORBIDDEN_IN_CODE) if (inCode.has(term)) found.push(term)
+    // Lowercased, not segmented: `Hà Nội` and `hà nội` are the same leak, and
+    // `toLowerCase` is the only normalisation that is safe across both scripts.
+    const rawLower = raw.toLowerCase()
+    for (const term of FORBIDDEN_SUBSTRINGS) if (rawLower.includes(term)) found.push(term)
 
     for (const term of found) {
       if (allow) {
