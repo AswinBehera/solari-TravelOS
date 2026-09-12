@@ -410,6 +410,7 @@ Tasks:
 - **P0.5** `apps/worker`: a scheduled-runner entry point (claim, drain, exit) against a `jobs` table with `FOR UPDATE SKIP LOCKED`, one no-op job type, a `Map<string, DomainPack>` registry with zero packs registered, and a shutdown path that closes every kernel session on SIGTERM — a runner can be cancelled mid-flight (ADR-0014). `apps/api`: Hono on Cloudflare Workers with a health endpoint, Supabase JWT middleware (ADR-0013), and Postgres through Hyperdrive. Acceptance includes a **measured CPU-per-request number against the free plan's 10 ms ceiling**, recorded in STATUS. If it does not fit, the fallback is Supabase Edge Functions, not a paid plan.
 - **P0.6** Dev ergonomics: `pnpm dev` runs api + worker + web with hot reload. `.env.example`. `docs/STATUS.md` initialised.
 - **P0.7** `tools/check-seam.ts` and `pnpm check:seam`: the lexicon check and the dependency-direction check from section 1.6, plus the `// seam:allow` counter. Wire into the Turbo task graph so `pnpm check` runs it, and into CI. Test it both ways: a fixture file with a forbidden word fails, the real tree passes. Record ADR-0009.
+- **P0.8** *(added by the executor, 12 September 2026)* **Run the acceptance criteria below, literally, from a cold clone.** Not a review — an execution: clone into an empty directory, follow the README as written, time it; run the `@live` test and read the session row back out of Postgres with SQL; plant a travel word and watch `check:seam` fail. This was not a task in the original plan, and it should have been. Two of the three criteria were false when first executed and had been for days without producing a symptom. **The general lesson, for every phase after this one: an acceptance criterion that has never been executed is a claim, not a test, and the phase it belongs to is not finished.** Done: 31 s to a green check against a 10-minute budget; two silent-green defects and one real timezone-aliasing bug found and fixed. See STATUS.
 
 Acceptance: a fresh clone reaches `pnpm dev` in under 10 minutes following README. The `@live` kernel test passes and its session row appears in Postgres. `pnpm check:seam` passes and demonstrably fails when a travel word is planted under `packages/samsara/`.
 
@@ -653,7 +654,7 @@ Unit economics sanity check to run at Phase 6: cost per active user per month vs
 ## Appendix A: Task index (copy into STATUS.md as the checklist)
 
 ```
-P0.1 P0.2 P0.3 P0.4 P0.5 P0.6 P0.7
+P0.1 P0.2 P0.3 P0.4 P0.5 P0.6 P0.7 P0.8
 P1.1 P1.2 P1.3 P1.4 P1.5 P1.6 P1.7 P1.8
 P2.1 P2.2 P2.3 P2.4 P2.5 P2.6 P2.7 P2.8
 P3.1 P3.2 P3.3 P3.4 P3.5 P3.6

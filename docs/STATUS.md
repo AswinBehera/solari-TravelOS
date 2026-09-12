@@ -1,18 +1,20 @@
 # STATUS
 
-Phase: 0
-Last completed: **P0.7** (the seam check): `tools/check-seam.ts` and `pnpm check:seam` enforce
-ADR-0009 mechanically — a two-tier lexicon, an import-direction scan, and a counted
-`// seam:allow` budget — plus the repo's first CI workflow. The engine's 44 vocabulary breaches
-were all fixed by rewriting; **zero allows used of five**. Before that, **P0.6** (dev ergonomics):
-`pnpm dev` runs web + api + worker with hot reload, each on the runtime it actually deploys to,
-and **P0.5** (the queue and the two runtimes): a Postgres `jobs`/`job_events` pair claimed
-with `FOR UPDATE SKIP LOCKED`, `apps/worker`'s drain loop with lease, backoff and a correct SIGTERM
-path, `apps/api`'s Hono routes with Supabase JWT verification, `workflow_dispatch`, and a bounded SSE
-progress stream. Both ADR-0016 acceptance criteria measured, below. 148 tests green (67 kernel + 13
-kernel-against-Postgres + 11 worker + 9 api + 3 db + 20 tools + 17 `@samsara/core` + 8 `@dt/core`),
-migrations 0000-0005 applied and verified.
-NEXT: P0.8
+Phase: 0 — **complete, pending the gate.**
+Last completed: **P0.8** (the acceptance run): Phase 0's own three acceptance criteria executed
+literally for the first time. Criterion 3 held. **Criteria 1 and 2 were both false and had been
+for days, with no symptoms.** A fresh clone following the README produced `67 passed | 14
+skipped`, exit 0, testing none of the job store; and the `@live` test had never written a
+session row to Postgres at all, because it used a memory store for both session and counters.
+Both fixed, both re-verified from a clean clone: **31 seconds** to a green `pnpm check` against
+a 10-minute budget, 148 tests including all 13 Postgres ones, `pnpm dev` verified end to end in
+the clone, `@live` green with row `e9330835` in `sessions`, seam ok at 65 files with **zero
+allows of five**. A third finding fell out of the live run — `Asia/Ho_Chi_Minh` and
+`Asia/Saigon` are one zone under two spellings and ICU answers with the older one, so the
+viewpoint check was reporting a false negative. Before that, **P0.7** (the seam check),
+**P0.6** (dev ergonomics) and **P0.5** (the queue and the two runtimes); all three were
+committed this session, having lived only in the working tree until now.
+NEXT: **the Phase 0 gate** (see below), then P1.0.
 Branch: main
 Known breakage: none. (The 0003/0004 gap from last session is closed — Docker was started, all six
 migrations are recorded, and `places.external_ref`/`resolved_tier` are live.)
@@ -204,6 +206,95 @@ Last session notes:
     green, which is the failure P0.6 exists to remove.
 
 
+- 2026-09-12 (Claude Code) — session 5
+
+  - **P0.8 is not in the plan.** Phase 0's task list ends at P0.7. What was left was the phase's
+    own **acceptance criteria and gate**, which is what this session did. Worth recording
+    because the result argues for making that a numbered task everywhere: two of the three
+    criteria were false, both had been false for days, and neither had produced a symptom.
+
+  - **P0.5, P0.6 and P0.7 are committed.** They had lived only in the working tree — 69 files,
+    HEAD still at P0.4. Four commits, scoped by concern, plus the P0.8 fixes. They were split
+    out of one tree at the end, so each is coherent but was not built in isolation; the commit
+    that says so says so.
+
+  - **Criterion 1 — a fresh clone reaches `pnpm dev` in under 10 minutes. Now true: 31 seconds.**
+    Measured by cloning into an empty directory and following the README verbatim. install 4 s
+    (17 s with a cold pnpm store, measured separately), `db:up` 4 s, migrate+seed 5 s, `pnpm
+    check` 18 s. 148 tests. Then `pnpm dev` in the clone: `/api/health` through Vite's proxy
+    into workerd returned `{"ok":true,"service":"api"}` and the runner logged
+    `claimed:1 succeeded:1 reclaimed:1`. The one unmeasured piece is the `postgres:17-alpine`
+    pull on a machine that has never had it; labelled rather than estimated.
+
+  - **The first run of that criterion failed, and it is the same bug P0.7 already fixed.**
+    Following the README exactly produced **`67 passed | 14 skipped`, exit 0** — none of the
+    job store tested. P0.7 found Turbo 2's strict env mode filtering `DATABASE_URL` and declared
+    it on the `test` task. That was correct and insufficient: turbo forwards a variable it can
+    see, and **nothing ever put this one in turbo's environment, because nothing loads `.env`.**
+    Every layer behaved correctly and the run tested nothing. I had never seen it because I
+    always ran `DATABASE_URL=... pnpm check` out of habit.
+    - Root `test` script now loads `.env` via `node --env-file-if-exists`, which moves the Node
+      floor to **22.9** — cheaper than a dotenv dependency in a repo that has refused every
+      gratuitous one.
+    - **The durable half: `jobs.pg.test.ts` now fails without a database rather than skipping**,
+      unless `SAMSARA_NO_DB=1` says the omission is deliberate. Plumbing fixes hold until the
+      next layer appears above them; the actual defect is the silent skip, because a green run
+      that means nothing never gets investigated. The opt-out stays, because forbidding it just
+      moves people to commenting the test out — it only has to be said out loud, which is the
+      bargain `// seam:allow` already strikes.
+
+  - **Criterion 2 — `@live` passes and its session row appears in Postgres. The row half had
+    never been implemented.** The test used `MemorySessionStore` *and* `MemoryCounterStore` and
+    asserted against the in-memory logger; no row had ever appeared, and it had passed since
+    P0.4. The reason it was written that way is good and was applied one noun too far: counters
+    must stay in memory or CI spends the demo's allowance on itself, but **a counter is money
+    already spent and a session row is a record of something that happened.** The test now
+    writes to Postgres when `DATABASE_URL` is set and reads the row back **through SQL**, not
+    through the store that wrote it — a store asserting its own return value proves nothing
+    about what landed. Budget stays isolated either way.
+
+  - **A real defect the live run found: `Asia/Ho_Chi_Minh` and `Asia/Saigon` are one zone.**
+    The test failed on `expected 'Asia/Saigon' to be 'Asia/Ho_Chi_Minh'`. The first is IANA's
+    canonical id since 2016, the second the older name kept as a link, and **ICU — what every
+    browser and every Node build resolves through — answers with the older one.** The viewpoint
+    had landed perfectly: egress `103.252.202.21`, `navigator.language` `vi-VN`, offset −420.
+    The assertion was wrong.
+    - Not a test nit. **"Did the viewpoint reach the page" is a check every adapter after P1.0
+      has to make**, and it decides whether an Observation is interpretable. A false negative is
+      the expensive direction — it discards good data and sends someone hunting a proxy bug that
+      does not exist. `Asia/Calcutta`/`Asia/Kolkata` is the same trap.
+    - `packages/samsara/kernel/src/timezone.ts`: `canonicalTimezoneId` and `sameTimezone`,
+      canonicalising **through `Intl` rather than a table we maintain** — aliases move with the
+      tzdb and a hand-written map goes stale in silence. 4 tests, including that two zones
+      sharing an offset (`Asia/Singapore` vs `Australia/Perth`) stay distinct.
+    - **The `sessions` row still stores what we asked for**, which is correct: it records the
+      viewpoint requested. What the page reported is a separate fact, and **P1.1 is where a
+      persona starts carrying both** — the gap between them is why an Observation can be read.
+    - Note the chain: P0.7 moved the engine's fixtures off `Asia/Bangkok` (no alias) onto
+      `Asia/Ho_Chi_Minh` (has one) to get the product's first city out of the engine's
+      vocabulary. **The seam fix is what exposed this bug.**
+
+  - **Criterion 3 — held, verified both ways again.** Clean tree: `seam ok — 65 files under
+    packages/samsara, no travel vocabulary, no travel dependencies.` With `export const
+    hotelName` planted in `@samsara/core`: exit 1, naming file, line, the matched word, and the
+    three remedies. **Zero allows of five.**
+
+  - **Live spend: 0.1048 minutes across two sessions** (`6596664d` 0.0549, the run that failed
+    on the assertion; `e9330835` 0.0499, green). Cumulative across the project: **0.204 of
+    4,000 minutes**, 0.005%.
+
+  - **One placeholder closed, one deliberately not.** `GITHUB_REPOSITORY` is now
+    `AswinBehera/solari-TravelOS`. The Hyperdrive id is issued by `wrangler hyperdrive create`
+    and cannot be invented, so it stays — now with a comment saying it is the one line that must
+    change on deploy day, and that nothing local needs it.
+
+  - **Not fixed, recorded: the Postgres tests share a database with `pnpm dev`.**
+    `jobs.pg.test.ts` truncates `jobs` before each test, against the same
+    `localhost:5432/doen_thang` the dev runner drains. Running `pnpm test` while `pnpm dev` is up
+    truncates the dev queue out from under a live worker. Harmless today (the only job type is
+    `noop`) and the fix is a separate test database, which is more moving parts than P0.8 should
+    add. **Architect's call before P1.2, when harvest jobs start carrying state worth keeping.**
+
 Decisions taken by the executor, for the architect to overrule if wrong:
 - Packages are **source-only**: `exports` points at `./src/index.ts`, there is no build step, and
   consumers compile through Vite/tsx. Removes a whole class of stale-dist bug. Revisit if a package
@@ -357,3 +448,56 @@ Open for architect before P0.8:
   bounded backing-off stream; foreground jobs are dispatched via `workflow_dispatch`. Consequence
   for P0.5: the API gains an `actions:write` GitHub token as a Worker secret, and acceptance gains
   a case asserting a bounded query count for a stream held open across a real harvest.
+
+---
+
+## The Phase 0 gate
+
+Per PLAN §5: *"Aswin reviews the kernel interface, the `DomainPack` contract, and ADRs 0009 to
+0014. Nothing else."* All three acceptance criteria are met and measured above. What follows is
+what the gate needs to look at, and the three places where the executor deviated or stopped
+short on purpose.
+
+**1. The kernel interface** — `packages/samsara/kernel/src/{ports,kernel,result}.ts`.
+`withBrowser(purpose, viewpoint, fn)` refuses on the budget guard before anything opens, races a
+hard deadline, force-closes on overrun, closes in a `finally`, and meters the minutes actually
+taken whether or not the operation succeeded. Failures are classified
+`budget | blocked | timeout | upstream | config | internal`; only `upstream` and `internal`
+retry. `ports.ts` defines `BrowserLauncher`/`SandboxLauncher` and `solari.ts` is the only file
+in the repository that imports the provider SDK. **The question for the gate:** the viewpoint is
+`{ country, locale, timezoneId }` today. P1.1 adds stored preferences and a warmed profile.
+Is `Viewpoint` the right name and the right shape to grow, or should it be a persona reference
+from the start?
+
+**2. The `DomainPack` contract** — `packages/samsara/refine/src/pack.ts`. **Only the identity
+half exists** (`id`, `version`) plus `PackRegistry`, and this is the deviation most worth
+overruling if it is wrong. PLAN §2.5 specifies `extract`, `entity`, `resolve`, `dedupKeys`,
+`score`, `sources`, `queries`; writing those now would mean inventing `RawItem` batching,
+`EntityRepo` and `ScoreSet` plumbing against no caller, and the first real pack would be shaped
+by guesses rather than correcting them. What P0.5 needed was narrower and is real: a typed
+registry the worker holds at boot with **zero packs in it** — the assertion that the runner has
+no vertical compiled into it. `DomainPack` is already the exported name, so widening it at P2.2
+is one file rather than every consumer. **The question:** accept the deferral, or is there a
+member whose shape must be fixed now because something in P1 will otherwise be built against
+the wrong assumption?
+
+**3. ADRs 0009 to 0014**, plus the four written since:
+- **0009 seam** — with the P0.7 amendment: the allowance ceiling was set before anyone tried to
+  enforce it; 44 breaches, all fixed by rewriting, zero allows used.
+- **0010 domain pack** — see the deferral above.
+- **0011 OS is product language**, **0012 OpenRouter**, **0013 Supabase Auth** (no RLS in v1),
+  **0014 Cloudflare + GitHub Actions** (the one that deleted BullMQ, Redis and the always-on box).
+- Since: **0015 viewpoint over egress**, **0016 progress streaming and job dispatch**,
+  **0017 place resolution without Google**, **0018 Protomaps basemap**, **0019 kernel owns the
+  queue and splits by runtime**.
+
+**Open questions that block P1**, unchanged from last session and now the only things standing
+between here and P1.0:
+- Section 10 questions 4, 5, 6, 7, 8 are unanswered.
+- Whether to ask Solari about `th` residential egress on their roadmap. ADR-0015 works without
+  it; the answer turns a design question back into a scheduling one.
+- The shared test/dev database, noted above.
+
+**Nothing is deployed, and nothing can be until two things exist:** a Cloudflare account (for the
+Hyperdrive id) and Supabase credentials (`SUPABASE_URL` for the real JWT path). Neither blocks
+any local work.
