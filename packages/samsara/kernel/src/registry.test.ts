@@ -10,8 +10,8 @@ const row = (over: Partial<SessionRecord> = {}): SessionRecord => ({
   domainId: null,
   personaId: null,
   country: "sg",
-  locale: "th-TH",
-  timezoneId: "Asia/Bangkok",
+  locale: "vi-VN",
+  timezoneId: "Asia/Ho_Chi_Minh",
   startedAt: new Date("2026-09-11T09:00:00.000Z"),
   endedAt: null,
   minutes: 0,
@@ -100,7 +100,7 @@ describe("structured logs", () => {
 
     const open = logger.events.find((e) => e.event === "session.open")
     const close = logger.events.find((e) => e.event === "session.close")
-    expect(open).toMatchObject({ purpose: "harvest", country: "sg", locale: "th-TH" })
+    expect(open).toMatchObject({ purpose: "harvest", country: "sg", locale: "vi-VN" })
     expect(close).toMatchObject({ outcome: "ok", bytes: 4096 })
   })
 
@@ -146,6 +146,15 @@ describe("structured logs", () => {
       "kind",
       "message",
       "attempts",
+      "jobId",
+      "type",
+      "outcome",
+      "willRetry",
+      "runId",
+      "claimed",
+      "succeeded",
+      "failed",
+      "reclaimed",
     ])
     for (const event of logger.events) {
       for (const key of Object.keys(event)) expect(allowed).toContain(key)

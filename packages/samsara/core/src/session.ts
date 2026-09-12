@@ -36,7 +36,7 @@ export const session = z
     /**
      * The viewpoint the session presented, which is **not** the same thing as
      * `country`. `country` is where the packets came from; these are what the
-     * browser claimed to be. They diverge on purpose — a `th-TH` browser on an
+     * browser claimed to be. They diverge on purpose — a `vi-VN` browser on an
      * `sg` egress is a deliberate, recorded compromise, not a misconfiguration —
      * and an Observation is only interpretable next to the viewpoint that produced
      * it. `null` means the session took the provider's defaults, which are `en-US`

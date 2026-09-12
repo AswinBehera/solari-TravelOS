@@ -7,14 +7,14 @@
  *     "supported":["au","br","ca","de","es","fr","gb","in","it","jp","kr",
  *                  "mx","nl","sg","us"]}
  *
- * **This list does not include `th`.** Plan section 1.4 names Bangkok as the first
- * city, so the premise that a persona can browse from a Thai address is not
- * available on this provider today. That is a product question (see section 10),
- * not something the kernel can paper over — and the kernel's job is to make it
- * fail immediately, by name, instead of at a launch that has already cost a round
- * trip.
+ * **This list does not include `th`**, which plan section 1.4 names as the first
+ * market. The premise that a persona can browse from a `th` address is therefore
+ * not available on this provider today. That is a product question (see section
+ * 10), not something the kernel can paper over — and the kernel's job is to make
+ * it fail immediately, by name, instead of at a launch that has already cost a
+ * round trip.
  *
- * `jp` is present, which is why section 1.4's second city (Tokyo) is unaffected.
+ * `jp` is present, which is why section 1.4's second market is unaffected.
  *
  * Re-check before Phase 1: pools change, and this is the sort of list that gains
  * a country quietly. The check that reads it is one line; the list is the part

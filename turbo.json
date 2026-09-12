@@ -8,6 +8,25 @@
     },
     "test": {
       "dependsOn": ["^typecheck"],
+      "outputs": [],
+      // Turbo 2 runs tasks in strict env mode: a variable not named here is not
+      // visible to the task, whatever the shell exported. Without this line
+      // `DATABASE_URL` never reaches vitest, the 13 Postgres tests skip themselves,
+      // and the run still reports green — which is exactly how CI would have
+      // claimed to test the one component with real concurrency in it.
+      "env": ["DATABASE_URL", "SOLARI_LIVE"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": []
+    },
+    "//#check:seam": {
+      "inputs": ["packages/samsara/**", "tools/check-seam.ts"],
+      "outputs": []
+    },
+    "//#test:tools": {
+      "inputs": ["tools/**"],
       "outputs": []
     }
   }

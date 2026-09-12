@@ -26,9 +26,9 @@ describe("the seam", () => {
     // Matches import and export statements specifically rather than any occurrence of
     // the string, so that this file — which must name the forbidden scope in order to
     // check for it — does not report itself.
-    const importsTravelScope = /(?:\bfrom|\bimport|\brequire\()\s*["']@dt\//
+    const importsProductScope = /(?:\bfrom|\bimport|\brequire\()\s*["']@dt\//
     const offenders = sourceFiles(here).filter((f) =>
-      importsTravelScope.test(readFileSync(f, "utf8")),
+      importsProductScope.test(readFileSync(f, "utf8")),
     )
     expect(offenders).toEqual([])
   })

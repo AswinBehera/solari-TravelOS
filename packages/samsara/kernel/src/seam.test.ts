@@ -20,17 +20,17 @@ const sourceFiles = (dir: string): string[] =>
 
 // Matched as a statement rather than a substring, so this file does not report
 // itself for containing the pattern it is looking for.
-const importsTravelScope = /(?:\bfrom|\bimport|\brequire\()\s*["']@dt\//
+const importsProductScope = /(?:\bfrom|\bimport|\brequire\()\s*["']@dt\//
 
 describe("@samsara/kernel stays on the engine side of the seam", () => {
-  it("imports nothing from the travel scope", () => {
+  it("imports nothing from the product scope", () => {
     const offenders = sourceFiles(join(pkgRoot, "src")).filter((file) =>
-      importsTravelScope.test(readFileSync(file, "utf8")),
+      importsProductScope.test(readFileSync(file, "utf8")),
     )
     expect(offenders).toEqual([])
   })
 
-  it("declares no travel-scope dependency", () => {
+  it("declares no product-scope dependency", () => {
     const pkg = JSON.parse(readFileSync(join(pkgRoot, "package.json"), "utf8")) as {
       dependencies?: Record<string, string>
       devDependencies?: Record<string, string>

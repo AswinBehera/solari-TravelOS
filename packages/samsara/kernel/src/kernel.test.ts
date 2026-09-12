@@ -212,11 +212,12 @@ describe("config is refused locally, not by the provider", () => {
   })
 
   it("rejects a country the provider's pool does not carry, and names the nearest", () => {
-    // `th` is the case that matters: plan section 1.4 names Bangkok as the first
-    // city, and Solari's residential pool has no Thai egress (learned from a live
-    // 400 on 11 Sep 2026). The kernel refuses locally so this surfaces as a
-    // config error at the call site rather than a 400 after a round trip.
-    const result = Kernel.validateLaunch({ stealth: true, proxy: { country: "th" } })
+    // The shape that matters: a country the product wants and the pool does not
+    // carry. Solari's residential pool has no `vn` egress — nor `th`, the first
+    // market — learned from a live 400 on 11 Sep 2026 that listed the whole pool.
+    // The kernel refuses locally so this surfaces as a config error at the call
+    // site rather than a 400 after a round trip.
+    const result = Kernel.validateLaunch({ stealth: true, proxy: { country: "vn" } })
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error.kind).toBe("config")
@@ -271,11 +272,12 @@ describe("config is refused locally, not by the provider", () => {
 })
 
 describe("the viewpoint is not the proxy country", () => {
-  // The reason this block exists: Solari has no Thai egress, and the reflex fix —
-  // "use sg instead" — quietly answers a different question. What a Bangkok local
-  // sees is produced mostly by language, stored preference, and history; the IP is
-  // the last and weakest of the signals. So the kernel has to be able to say
-  // "Thai browser, Bangkok clock, Singapore packets" and record that it did.
+  // The reason this block exists: the pool has no egress in half the markets the
+  // product wants, and the reflex fix — "use `sg` instead" — quietly answers a
+  // different question. What a local sees is produced mostly by language, stored
+  // preference, and history; the IP is the last and weakest of the signals. So the
+  // kernel has to be able to say "`vi-VN` browser, Indochina clock, `sg` packets"
+  // and record that it did.
   it("presents a locale and timezone that disagree with the egress country", async () => {
     let seen: unknown
     const launcher: BrowserLauncher = {
@@ -288,12 +290,12 @@ describe("the viewpoint is not the proxy country", () => {
     const { kernel } = harness(launcher)
     await kernel.withBrowser(
       "harvest",
-      { country: "sg", locale: "th-TH", timezoneId: "Asia/Bangkok" },
+      { country: "sg", locale: "vi-VN", timezoneId: "Asia/Ho_Chi_Minh" },
       async () => null,
     )
     expect(seen).toMatchObject({
       proxy: { country: "sg" },
-      viewpoint: { locale: "th-TH", timezoneId: "Asia/Bangkok" },
+      viewpoint: { locale: "vi-VN", timezoneId: "Asia/Ho_Chi_Minh" },
     })
   })
 
@@ -301,14 +303,14 @@ describe("the viewpoint is not the proxy country", () => {
     const { kernel, sessions, logger } = harness(fakeLauncher())
     await kernel.withBrowser(
       "harvest",
-      { country: "sg", locale: "th-TH", timezoneId: "Asia/Bangkok" },
+      { country: "sg", locale: "vi-VN", timezoneId: "Asia/Ho_Chi_Minh" },
       async () => null,
     )
     const [row] = [...sessions.rows.values()]
     // Both halves, or an Observation cannot be read later.
-    expect(row).toMatchObject({ country: "sg", locale: "th-TH", timezoneId: "Asia/Bangkok" })
+    expect(row).toMatchObject({ country: "sg", locale: "vi-VN", timezoneId: "Asia/Ho_Chi_Minh" })
     const opened = logger.events.find((e) => e.event === "session.open")
-    expect(opened).toMatchObject({ country: "sg", locale: "th-TH" })
+    expect(opened).toMatchObject({ country: "sg", locale: "vi-VN" })
   })
 
   it("says so when a session has no viewpoint at all", async () => {
@@ -319,11 +321,11 @@ describe("the viewpoint is not the proxy country", () => {
     expect([...sessions.rows.values()][0]).toMatchObject({ locale: null, timezoneId: null })
   })
 
-  it("rejects a timezone offset in place of an IANA zone", () => {
+  it("rejects a timezone offset instead of an IANA zone", () => {
     const bad = Kernel.validateLaunch({
       stealth: true,
       proxy: { country: "sg" },
-      viewpoint: { locale: "th-TH", timezoneId: "GMT+7" },
+      viewpoint: { locale: "vi-VN", timezoneId: "GMT+7" },
     })
     expect(bad.ok).toBe(false)
     if (bad.ok) return
@@ -334,13 +336,13 @@ describe("the viewpoint is not the proxy country", () => {
   it("rejects a locale that is not BCP 47", () => {
     const bad = Kernel.validateLaunch({
       stealth: true,
-      viewpoint: { locale: "thai", timezoneId: "Asia/Bangkok" },
+      viewpoint: { locale: "vietnamese", timezoneId: "Asia/Ho_Chi_Minh" },
     })
     expect(bad.ok).toBe(false)
     expect(
       Kernel.validateLaunch({
         stealth: true,
-        viewpoint: { locale: "th-TH", timezoneId: "Asia/Bangkok" },
+        viewpoint: { locale: "vi-VN", timezoneId: "Asia/Ho_Chi_Minh" },
       }).ok,
     ).toBe(true)
   })

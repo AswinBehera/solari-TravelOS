@@ -56,8 +56,8 @@ describe.skipIf(!live)("@live kernel against the real provider", () => {
         // is to prove the disagreement actually reaches the page. Solari sets
         // neither of these — its default context is en-US on UTC — so if the
         // assertions below pass, they pass because the kernel built the context.
-        locale: "th-TH",
-        timezoneId: "Asia/Bangkok",
+        locale: "vi-VN",
+        timezoneId: "Asia/Ho_Chi_Minh",
         deadlineMs: 90_000,
         attempts: 1,
       },
@@ -128,8 +128,8 @@ describe.skipIf(!live)("@live kernel against the real provider", () => {
     // The viewpoint, as the page itself sees it. This is the whole point: a script
     // on the page reading `navigator.language` is one of the signals that decides
     // what gets served, and it is under our control in a way the IP is not.
-    expect(body.language).toBe("th-TH")
-    expect(body.timeZone).toBe("Asia/Bangkok")
+    expect(body.language).toBe("vi-VN")
+    expect(body.timeZone).toBe("Asia/Ho_Chi_Minh")
     // UTC+7, so getTimezoneOffset() is -420. Singapore would be -480; asserting the
     // number proves the clock moved rather than only the label.
     expect(body.offsetMinutes).toBe(-420)

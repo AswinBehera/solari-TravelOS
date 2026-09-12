@@ -95,13 +95,13 @@ export class Kernel {
       return err(failure("config", "proxy country must be lowercase ISO 3166-1 alpha-2"))
     }
     if (config.viewpoint && !/^[a-z]{2}(-[A-Za-z0-9]{2,8})*$/.test(config.viewpoint.locale)) {
-      return err(failure("config", "locale must be BCP 47, e.g. th-TH"))
+      return err(failure("config", "locale must be BCP 47, e.g. vi-VN"))
     }
     if (config.viewpoint && !config.viewpoint.timezoneId.includes("/")) {
-      // "Asia/Bangkok", not "GMT+7". An offset drifts across a DST boundary and,
+      // "Asia/Ho_Chi_Minh", not "GMT+7". An offset drifts across a DST boundary and,
       // worse, an offset is not what a real browser reports — which makes it a
       // tell on exactly the surfaces this exists to blend into.
-      return err(failure("config", "timezoneId must be an IANA zone, e.g. Asia/Bangkok"))
+      return err(failure("config", "timezoneId must be an IANA zone, e.g. Asia/Ho_Chi_Minh"))
     }
     if (config.proxy && !isSupportedProxyCountry(config.proxy.country)) {
       // Caught here rather than at the provider, which answers a 400 — a round

@@ -1,0 +1,73 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A second push to the same branch cancels the first. Unlike `worker.yml`, where
+# cancelling a run would abandon a leased job, a cancelled CI run costs nothing —
+# and Actions minutes are part of the $20 (ADR-0014).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # The Postgres tests are the ones that matter — `packages/samsara/kernel`'s job
+    # store is the piece with real concurrency in it, and a memory fake cannot test
+    # the property that makes it correct (ADR-0019). So CI runs a real 17.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: doen_thang
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/doen_thang
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm db:migrate
+
+      # Kept as separate steps rather than one `pnpm check`, because the step name
+      # is what the PR page shows. "check:seam" failing tells a reader the engine
+      # learned a travel word; "check" failing tells them nothing.
+      - name: lint
+        run: pnpm lint
+
+      - name: typecheck
+        run: pnpm typecheck
+
+      - name: seam
+        run: pnpm check:seam
+
+      - name: test (tools)
+        run: pnpm test:tools
+
+      - name: test
+        run: pnpm test

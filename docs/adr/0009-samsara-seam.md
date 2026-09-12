@@ -43,6 +43,51 @@ of done:
 2. **Dependency direction check** — fail if any `packages/samsara/*/package.json` lists a
    `@dt/*` dependency.
 
+### Amendment, P0.7: the lexicon is split, and imports are checked too
+
+Implementing this check (`tools/check-seam.ts`) turned up two things the decision above got
+wrong.
+
+**A word-boundary hit is the wrong test.** Run against the real tree it produced ~44 failures,
+and almost every one was ordinary English in a comment: "one round trip", "cancelled
+mid-flight", "the only place this happens". A check that cries wolf forty times gets switched
+off, and forty `seam:allow` comments would have blown an allowance ceiling of five on the day
+it shipped. But the opposite rule — blank all comments, scan only code — is blind in the other
+direction: the engine's own comments said things like *"plan section 1.4 names Bangkok as the
+first city"*, which is the engine knowing precisely what it is forbidden to know. Comments are
+where domain knowledge leaks **first**, because a comment is where a person explains *why* in
+product terms.
+
+So the list is cut by how ambiguous each word is in English, not by where it sits:
+
+- **Unambiguous** — `bangkok`, `tokyo`, `postcard`, `itinerary`, `tourist`, `hotel`,
+  `restaurant`. Nobody writes these by accident. Scanned everywhere, comments included.
+- **Ordinary English** — `travel`, `trip`, `place`, `flight`, `booking`. Scanned in code and
+  string literals only. A prompt saying "hotel" is a breach; a comment saying "round trip" is
+  a sentence.
+
+Within code, matching is by **identifier segment**, not word boundary: `\btravel\b` misses
+`travelPack` and `Asia/Bangkok`, while a substring match flags `replace` and `displacement`.
+Identifiers are split on case changes and separators so the check sees what a reader sees.
+
+**A third check was missing.** The lexicon can never see `import { db } from "@dt/db"` —
+no forbidden word appears in it — and `package.json` cannot see it either, because a
+source-only monorepo resolves workspace imports that were never declared. The engine could
+have imported the entire product and both declared checks would have reported a clean tree.
+`check-seam.ts` therefore also scans engine source for `@dt/*` import and dynamic-import
+statements, after blanking comments so a comment saying *"never import from `@dt/db`"* does
+not fail.
+
+Two smaller rules that make the allowance ceiling mean something: an allow must carry a
+reason, and an allow that suppresses nothing is an error. Without the second, allows
+accumulate as dead comments and the count against the ceiling stops describing anything.
+
+**Result on the real tree: zero allows.** The 28 hits it found were all fixable by rewriting,
+not by exempting — engine test fixtures moved from `th-TH`/`Asia/Bangkok` to
+`vi-VN`/`Asia/Ho_Chi_Minh` (chosen because `countries.ts` maps `vn` to the same substitute
+egress, so every property under test survives), and engine comments now name markets by ISO
+code. That the ceiling was never touched is the evidence the seam is in the right place.
+
 Source adapters are the subtle case, and the rule is that **adapters are per-source, not
 per-domain**. A TikTok adapter or a Booking.com price adapter is horizontal; an algorithm
 auditor and a pricing analyst want the identical file. What is travel-specific is which

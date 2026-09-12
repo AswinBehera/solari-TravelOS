@@ -21,10 +21,10 @@
  * proxy country is the visible knob. A platform deciding what to show a visitor
  * reads, roughly in descending order of weight: the account's region, the query's
  * language, any explicit region preference it has stored, the browser's locale
- * and timezone, and only then the egress IP. A `us` session asking in Thai with a
- * `th-TH` browser on `Asia/Bangkok` is closer to a Bangkok viewpoint than a Thai
- * IP asking in English would be — if a Thai IP were available at all, which on
- * this provider it is not (see `countries.ts`).
+ * and timezone, and only then the egress IP. A `us` session asking in Vietnamese
+ * with a `vi-VN` browser on `Asia/Ho_Chi_Minh` is closer to a local viewpoint than
+ * a `vn` IP asking in English would be — if a `vn` IP were available at all, which
+ * on this provider it is not (see `countries.ts`).
  *
  * The provider does **not** set these. Its `newPage()` gives you the pool's
  * default context, which is `en-US` and UTC — i.e. nobody. Every session this

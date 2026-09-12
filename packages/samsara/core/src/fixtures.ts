@@ -32,7 +32,7 @@ export const personaFixture: Persona = {
   name: "nok",
   locality: "Riverside District",
   country: "th",
-  locale: "th-TH",
+  locale: "vi-VN",
   tier: "seeded",
   solariProfileId: "prof_nok",
   proxySession: "sticky_nok_01",
@@ -64,11 +64,11 @@ export const sessionFixture: Session = {
   personaId: uuid(1),
   // Egress and viewpoint deliberately disagree, because that is the normal case
   // and the schema has to make it legible rather than merely possible: the packets
-  // leave from `sg`, the browser says it is Thai on Bangkok time. An Observation
-  // read without both halves is uninterpretable.
+  // leave from `sg`, while the browser claims `vi-VN` on an Indochina clock. An
+  // Observation read without both halves is uninterpretable.
   country: "sg",
-  locale: "th-TH",
-  timezoneId: "Asia/Bangkok",
+  locale: "vi-VN",
+  timezoneId: "Asia/Ho_Chi_Minh",
   startedAt: at,
   endedAt: at,
   minutes: 3.2,
