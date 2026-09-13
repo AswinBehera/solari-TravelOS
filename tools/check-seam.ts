@@ -102,6 +102,27 @@ export const MAX_ALLOWS = 5
 const SCANNED_EXTENSIONS = [".ts", ".tsx", ".json", ".md", ".sql"]
 const SKIPPED_DIRECTORIES = new Set(["node_modules", "dist", ".turbo", "coverage"])
 
+/**
+ * Recorded captures, whose **contents are not scanned and whose names are**.
+ *
+ * A fixture is bytes a source sent us. The first real TikTok capture checked in
+ * contained the word "Travel" three times — in TikTok's own list of interest
+ * categories, offered to every visitor — and "Hà Nội" in a creator's bio. Neither
+ * is the engine knowing it is about travel; both are what a Vietnamese-language
+ * search for a sandwich returns. Scanning them would make the strictest tier of
+ * this check fire on facts about the world, and the only way to get green would be
+ * to edit evidence, which is worse than anything the seam protects against.
+ *
+ * The *name* is scanned, because that is the half a person chooses. A capture
+ * called `tiktok-search-hotels-bangkok` would be the engine being developed
+ * against travel — which is precisely the leak ADR-0009 is about — and it is
+ * caught here even though nothing inside the file is read.
+ *
+ * Fixture hits are reported with line 0: there is no line, the file itself is the
+ * finding.
+ */
+const FIXTURE_DIRECTORY = "__fixtures__"
+
 export interface Hit {
   file: string
   line: number
@@ -340,6 +361,11 @@ export function checkSeam(root: string): SeamReport {
 
   for (const full of files) {
     const file = relative(root, full)
+    if (file.split(/[\\/]/).includes(FIXTURE_DIRECTORY)) {
+      const named = scanSource(file, file, { stripComments: false })
+      for (const hit of named.hits) report.hits.push({ ...hit, line: 0 })
+      continue
+    }
     const source = readFileSync(full, "utf8")
     // JSON has no comments to blank, and Markdown is prose end to end — a README
     // under the engine describing "travel" would be a real breach, so it is scanned

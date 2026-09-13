@@ -70,7 +70,13 @@ const ITEM_ENDPOINTS = [
  * more session identity than YouTube's — `webIdLastTime`, the device id, an abuse
  * token, the whole `AppContext` — and this repository is public.
  */
-const REDACTED_KEYS = new Set([
+/**
+ * Exported for `fixture.test.ts`, which walks the checked-in capture and asserts
+ * that not one of these names survives in it. That is the part of the audit worth
+ * automating: the list grows every time a real page is read, and a fixture that
+ * was clean against the old list is not clean against the new one.
+ */
+export const REDACTED_KEYS = new Set([
   "webIdLastTime",
   "odinId",
   "deviceId",
@@ -119,6 +125,41 @@ const REDACTED_KEYS = new Set([
   // that no parser reads is redaction, not narrowing, and the difference is
   // whether a future layout change needs a new parser or a new session.
   "webapp.i18n-translation",
+  // Added after reading the *second* real capture — the first one that carried
+  // items, and therefore the first that carried an API response body. The state
+  // was clean by then; none of these is in the state.
+  //
+  // A live Apple Music developer JWT, issued to TikTok, sitting three levels
+  // inside every music object:
+  //
+  //   item.music.tt2dsp.tt_to_dsp_song_infos[].token.apple_music_token
+  //     .developer_token = "eyJhbGciOiJFUzI1NiIsImtpZCI6…"
+  //
+  // It is signed, it has an expiry, and it is not ours. `tt2dsp` goes as a block
+  // rather than the leaf alone, because the block is a cross-link table to music
+  // services and the next one to appear in it will be Spotify's.
+  "tt2dsp",
+  "apple_music_token",
+  "developer_token",
+  // Request tracking, exactly YouTube's `trackingParams` by another name. These
+  // identify our request to TikTok's logging, and they are in every response.
+  "log_pb",
+  "logid",
+  "impr_id",
+  "search_request_id",
+  "backendSourceEventTracking",
+  // Session-signed media URLs, carrying `x-signature`, `x-expires` and a
+  // parameter blob that encodes the client they were issued for. They are also
+  // the largest thing in the response.
+  //
+  // Dropped only after checking `parse.ts`: `readMedia` reads `cover`,
+  // `originCover` and `dynamicCover` and nothing else, so no draft loses a field.
+  // The three cover URLs are signed too and are *kept*, because they are what
+  // `mediaRefs` is — the redaction list exists to remove what a capture should
+  // never have carried, not to remove the harvest.
+  "playAddr",
+  "downloadAddr",
+  "bitrateInfo",
 ])
 
 // Two near-misses worth recording, because both would have typechecked, passed

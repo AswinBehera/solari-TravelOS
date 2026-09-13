@@ -225,6 +225,34 @@ describe("dependency direction", () => {
     expect(checkSeam(dir).hits.map((h) => h.term)).toEqual(["hà nội"])
   })
 
+  it("reads a recorded capture's name and not its contents", () => {
+    // A real TikTok search for a sandwich came back containing TikTok's own list of
+    // interest categories — "Travel" among them — and a creator's bio mentioning Hà
+    // Nội. That is what the world contains, not what this engine knows, and the only
+    // way to make the strictest tier green over it would be to edit evidence.
+    const dir = fixtureTree({
+      "packages/samsara/fake/package.json": JSON.stringify({ name: "@samsara/fake" }),
+      "packages/samsara/fake/src/__fixtures__/search-vi-VN.capture.json": JSON.stringify({
+        payload: { categories: ["Travel"], bio: "Hà Nội", hotel: "khách sạn" },
+      }),
+    })
+    expect(checkSeam(dir).hits).toEqual([])
+  })
+
+  it("still fails on the half of a fixture a person chose", () => {
+    // The name is picked by whoever spent the session, and a fixture recorded for a
+    // travel query is the engine being developed against travel — the leak itself,
+    // not a fact about the world. Reported against the file rather than a line,
+    // because there is no line.
+    const dir = fixtureTree({
+      "packages/samsara/fake/package.json": JSON.stringify({ name: "@samsara/fake" }),
+      "packages/samsara/fake/src/__fixtures__/tiktok-search-hotels-bangkok.capture.json": "{}\n",
+    })
+    const report = checkSeam(dir)
+    expect(report.hits.map((h) => h.term).sort()).toEqual(["bangkok", "hotel"])
+    expect(report.hits.every((h) => h.line === 0)).toBe(true)
+  })
+
   it("leaves ordinary non-Latin text alone", () => {
     // The tier must not become "any Thai string is suspicious". A greeting is not
     // domain vocabulary, and an engine test is allowed to prove UTF-8 survives.

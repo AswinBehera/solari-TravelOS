@@ -168,6 +168,112 @@ describe("what the redaction list learned from a real page", () => {
   })
 })
 
+describe("what the redaction list learned from a page that had items", () => {
+  /**
+   * The second real capture was the first that came back with results, and
+   * therefore the first that carried an API response body. Everything below was
+   * in it. The state had been clean since the previous round; none of this is in
+   * the state, which is the point — a list audited against one half of a payload
+   * has been audited against one half of a payload.
+   */
+  const body = () => ({
+    data: [
+      {
+        item: {
+          id: "7197054038658092315",
+          desc: "Bánh mì xoay @Pita ",
+          author: { uniqueId: "nguyenrua", signature: "HÓNG HỚT ĐƯỜNG PHỐ" },
+          video: {
+            cover: "https://p16.tiktokcdn.com/cover.jpeg?x-expires=1&x-signature=COVERSIG",
+            originCover: "https://p16.tiktokcdn.com/origin.jpeg",
+            dynamicCover: "https://p16.tiktokcdn.com/dynamic.jpeg",
+            playAddr: "https://v16.tiktokcdn.com/play?x-signature=PLAYSIG&bti=abcd",
+            downloadAddr: "https://v16.tiktokcdn.com/dl?x-signature=DOWNLOADSIG",
+            bitrateInfo: [{ PlayAddr: { UrlList: ["https://v16.tiktokcdn.com/b?x=BITRATESIG"] } }],
+          },
+          music: {
+            title: "nhạc nền",
+            tt2dsp: {
+              tt_to_dsp_song_infos: [
+                {
+                  token: {
+                    apple_music_token: { developer_token: "eyJhbGciOiJFUzI1NiJ9.APPLEJWT" },
+                  },
+                },
+              ],
+            },
+          },
+        },
+        // Tracking, at three different depths and under three different spellings.
+        log_pb: { impr_id: "20260913150906BDEE8335B52AC26AF2D3" },
+        extra: { logid: "20260913150906BDEE8335B52AC26AF2D3" },
+      },
+    ],
+    search_request_id: "SEARCHREQID",
+    backendSourceEventTracking: "BACKENDTRACKING",
+  })
+
+  it("strips a third-party vendor credential out of the music object", async () => {
+    const { page } = fakePage({}, [
+      response("https://www.tiktok.com/api/search/general/full/?q=x", 200, body()),
+    ])
+    const capture = await captureTikTok(context(page), "bánh mì", "search", NO_SETTLE)
+
+    // A live, signed, unexpired Apple Music developer token issued to TikTok. It
+    // is not ours to republish, and this repository is public.
+    expect(JSON.stringify(capture)).not.toContain("APPLEJWT")
+  })
+
+  it("strips the request tracking ids, wherever they are spelled", async () => {
+    const { page } = fakePage({}, [
+      response("https://www.tiktok.com/api/search/general/full/?q=x", 200, body()),
+    ])
+    const capture = await captureTikTok(context(page), "bánh mì", "search", NO_SETTLE)
+    const json = JSON.stringify(capture)
+
+    // YouTube's `trackingParams` by another name — these identify our request to
+    // TikTok's own logging.
+    for (const id of ["20260913150906BDEE8335B52AC26AF2D3", "SEARCHREQID", "BACKENDTRACKING"]) {
+      expect(json).not.toContain(id)
+    }
+  })
+
+  it("strips the signed playback URLs and keeps the covers, which are the harvest", async () => {
+    const { page } = fakePage({}, [
+      response("https://www.tiktok.com/api/search/general/full/?q=x", 200, body()),
+    ])
+    const capture = await captureTikTok(context(page), "bánh mì", "search", NO_SETTLE)
+    const json = JSON.stringify(capture)
+
+    for (const signature of ["PLAYSIG", "DOWNLOADSIG", "BITRATESIG"]) {
+      expect(json).not.toContain(signature)
+    }
+    // The covers are signed too, and they stay. `parse.ts` reads `cover`,
+    // `originCover` and `dynamicCover` to build `mediaRefs`; redacting them here
+    // would not make the fixture safer, it would delete a field from every future
+    // harvest. The redaction list removes what a capture should not have carried,
+    // not what it was opened to collect.
+    expect(json).toContain("COVERSIG")
+    expect(json).toContain("origin.jpeg")
+    expect(json).toContain("dynamic.jpeg")
+  })
+
+  it("leaves the record itself alone", async () => {
+    const { page } = fakePage({}, [
+      response("https://www.tiktok.com/api/search/general/full/?q=x", 200, body()),
+    ])
+    const capture = await captureTikTok(context(page), "bánh mì", "search", NO_SETTLE)
+    const json = JSON.stringify(capture)
+
+    // A denylist that ate the post would be a denylist nobody noticed was wrong
+    // until the fixture tests started passing against nothing.
+    expect(json).toContain("7197054038658092315")
+    expect(json).toContain("Bánh mì xoay")
+    expect(json).toContain("HÓNG HỚT ĐƯỜNG PHỐ")
+    expect(json).toContain("nhạc nền")
+  })
+})
+
 describe("observedPaths", () => {
   it("lists every path the page asked for, not only the ones that were kept", async () => {
     const { page } = fakePage({}, [

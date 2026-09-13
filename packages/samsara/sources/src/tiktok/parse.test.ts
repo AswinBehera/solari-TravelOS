@@ -6,13 +6,16 @@ import type { InterceptedBody, TikTokPayload } from "./types.js"
 /**
  * The trees below are **built by hand**. They test what the parser does with a
  * shape, not that the shape is right — only a recorded capture establishes that,
- * and `tiktok.fixture.test.ts` does not exist yet for the same reason its YouTube
- * counterpart does not: recording costs a browser session and publishes bytes.
+ * and `fixture.test.ts` is where that now happens: one real session, checked in,
+ * parsed by the shipped adapter.
  *
  * The distinction matters more here than it did for YouTube, because this parser
  * recognises items **structurally** rather than by name. A hand-written tree
  * proves the predicate accepts what I think an item looks like. It cannot prove
- * that is what TikTok sends.
+ * that is what TikTok sends. Keep both: the fixture says what one page held on one
+ * day, and these say what the parser does with the shapes that page did not
+ * contain — an item with no stats, a count written `1.2M`, a tree nested past the
+ * depth limit.
  */
 
 function item(over: Record<string, unknown> = {}): Record<string, unknown> {
