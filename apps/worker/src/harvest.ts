@@ -31,6 +31,16 @@ export interface HarvestPayload {
   domainId: string
   deadlineMs?: number
   attempts?: number
+  /**
+   * Ask the provider to record the session video.
+   *
+   * Off by default (section 8: recording is on for the first 20 runs of a new
+   * adapter, then off). It is a payload field rather than a property of the
+   * adapter because "this adapter is new" is a fact about the *calendar*, not
+   * about the code, and encoding it in the adapter would mean a deploy to turn it
+   * off — which is how recordings stay on for six months.
+   */
+  recording?: boolean
 }
 
 /**
@@ -54,6 +64,9 @@ function parsePayload(raw: unknown): HarvestPayload {
       throw new Error(`harvest.run: payload.${key} must be a positive number`)
     }
   }
+  if (p.recording !== undefined && typeof p.recording !== "boolean") {
+    throw new Error("harvest.run: payload.recording must be a boolean")
+  }
   return {
     personaId: p.personaId as string,
     sourceId: p.sourceId as string,
@@ -61,6 +74,7 @@ function parsePayload(raw: unknown): HarvestPayload {
     domainId: p.domainId as string,
     ...(p.deadlineMs === undefined ? {} : { deadlineMs: p.deadlineMs }),
     ...(p.attempts === undefined ? {} : { attempts: p.attempts }),
+    ...(p.recording === undefined ? {} : { recording: p.recording }),
   }
 }
 
@@ -122,6 +136,7 @@ export function createHarvestHandler(deps: HarvestHandlerDeps): JobHandler {
         profileId: persona.solariProfileId,
         ...(input.deadlineMs === undefined ? {} : { deadlineMs: input.deadlineMs }),
         ...(input.attempts === undefined ? {} : { attempts: input.attempts }),
+        ...(input.recording === undefined ? {} : { recording: input.recording }),
       },
     )
 

@@ -4,7 +4,6 @@ import { parseYouTube } from "./parse.js"
 import type { YouTubePayload } from "./types.js"
 
 export { buildSearchUrl, buildTrendingUrl, type YouTubePage } from "./capture.js"
-export { parseCount } from "./counts.js"
 export { parseYouTube } from "./parse.js"
 export type { YouTubePayload } from "./types.js"
 

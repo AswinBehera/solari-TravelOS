@@ -2,7 +2,47 @@
 
 Phase: 1 — in progress. Phase 0 is **complete, pending the gate** (below; the gate is a human
 review and does not block buildable work).
-Last completed: **P1.3 — the YouTube adapter.** `youtube.search` and `youtube.trending` are two
+Last completed: **P1.4 — the TikTok adapter.** `tiktok.search` and `tiktok.explore`, registered in
+`apps/worker` alongside the YouTube pair. 77 tests in `@samsara/sources`, **0 browser minutes
+spent**, seam allowances **0 of 5** across 111 files.
+
+**The brief ruled out more than it ruled in.** The plan names TikTok as the surface most likely to
+gate on IP geolocation and says to report the gap rather than work around it — so there is no
+captcha solving, no signature forging, no rotating personas until one is let through. The refusal
+*is* the measurement: P1.0's finding (query language dominant, egress worth about as much as waiting
+five minutes) was measured on a surface that honours `gl` and `hl` as URL parameters, and whether it
+survives a surface that enforces geography is the open question. TikTok takes exactly one viewpoint
+parameter in a URL — `lang` — and region comes from the egress IP alone, which is why this adapter
+and not YouTube's is the one that actually tests ADR-0015's `sg`-for-`th` compromise.
+
+`refusedBy` distinguishes **three** walls. `region-block` is the finding. `captcha` is a judgement
+about this session and feeds persona health. `login-wall` applies to every logged-out visitor and
+degrades a persona that did nothing wrong — an admitted cost, taken because a harvest that silently
+returns nothing from behind a wall is worse. And both strategies coming back empty is *not* `empty`:
+it means we could not read what TikTok sent, which is a different row and a different thing to fix.
+
+**Recognition is structural, because TikTok does not name its items.** YouTube tags results with
+renderer names; TikTok's items are anonymous objects in arrays whose names change per endpoint. The
+predicate is a digit-string `id`, a `desc` that is a string, and an `author` or `stats` — strict on
+purpose, because a loose one returns music tracks and hashtags as videos and every one of those gets
+stored as evidence and scored.
+
+**Two entries came off the redaction denylist for destroying content.** `signature` on a TikTok
+author is the account bio — free text in the local language, exactly what this project harvests.
+`userInfo` is the viewer in `SIGI_STATE` and a *result* in the search API, and key-name redaction
+cannot tell them apart. This is the second time in three sessions a denylist has been the problem;
+it survives only because there is no type-level alternative for bytes a third party sent us.
+
+**A doc comment of mine was false and a test proved it.** `guessLanguage` claimed Vietnamese
+diacritics are "present in almost any real Vietnamese sentence" — true of sentences, false of the
+four-word captions it will actually be handed. `bánh mì ngon quá` contains nothing outside Latin-1.
+Not fixed by widening the character class, which would report Spanish as Vietnamese; fixed by
+correcting the claim, asserting the limitation in a test, and preferring the source's own language
+field. The mechanism is worth keeping: the bug was in prose, and it surfaced only because the test
+string was realistic rather than convenient. See
+`casestudy_and_thinking/sessions/2026-09-13-p14-the-surface-that-says-no.md`.
+
+Before that: **P1.3 — the YouTube adapter.** `youtube.search` and `youtube.trending` are two
 adapters sharing one parser, `harvest.run` is wired into `apps/worker`, and 44 tests in
 `@samsara/sources` pass without a single one of them having seen YouTube. **0 browser minutes
 spent**, seam allowances still **0 of 5** across 103 files.
@@ -144,11 +184,11 @@ allows of five**. A third finding fell out of the live run — `Asia/Ho_Chi_Minh
 viewpoint check was reporting a false negative. Before that, **P0.7** (the seam check),
 **P0.6** (dev ergonomics) and **P0.5** (the queue and the two runtimes); all three were
 committed this session, having lived only in the working tree until now.
-NEXT: **the first live capture**, which is a decision rather than a task — one browser session
-and a recorded fixture committed to a public repo (see the top of this file). After it,
-`youtube.fixture.test.ts`, then **P1.4** (TikTok), which is the adapter most likely to gate on IP
-geolocation and therefore the one that tells us whether the `sg`-egress-for-`th`-viewpoint
-compromise in ADR-0015 actually holds.
+NEXT: **the first live capture**, which is a decision rather than a task — one browser session per
+source, and the recorded fixtures committed to a public repo (see the top of this file). It is now
+blocking two adapters rather than one: neither `youtube.fixture.test.ts` nor `tiktok.fixture.test.ts`
+exists, and nothing in `@samsara/sources` has been executed against a real page. The recorder takes
+`--source` and is ready for all four surfaces. After it, **P1.5** (Google Maps reviews).
 And **the Phase 0 gate** (see below), whose fourth question — P1.0 measured the signal stack and it
 does not match ADR-0015's ordering — is still open. Gate question 1 (`Viewpoint`'s shape) is now
 answered in code: `{country, locale, timezoneId}`, stored on the persona row and read straight

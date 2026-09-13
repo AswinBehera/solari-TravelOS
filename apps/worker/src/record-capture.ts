@@ -1,5 +1,11 @@
 import { resolve } from "node:path"
-import { type Capture, createYouTubeAdapter, harvest } from "@samsara/sources"
+import {
+  type Capture,
+  createTikTokAdapter,
+  createYouTubeAdapter,
+  harvest,
+  type SourceAdapter,
+} from "@samsara/sources"
 import { writeFixture } from "@samsara/sources/fixture"
 import { boot } from "./boot.js"
 
@@ -23,7 +29,7 @@ import { boot } from "./boot.js"
  *
  * Usage:
  *   pnpm --filter @dt/worker record:plan -- --query="xin chào" --country=sg --locale=vi-VN
- *   pnpm --filter @dt/worker record      -- --query="xin chào" --country=sg --locale=vi-VN
+ *   pnpm --filter @dt/worker record      -- --source=tiktok.search --query="bánh mì" --locale=vi-VN
  */
 
 const args = process.argv.slice(2)
@@ -33,7 +39,27 @@ const flag = (name: string, fallback: string): string => {
 }
 const dryRun = args.includes("--dry-run")
 
-const surface = flag("surface", "search") === "trending" ? "trending" : "search"
+/**
+ * `--source` names an adapter the same way a `harvest.run` payload does, because
+ * a recorder that addresses sources differently from the queue is a recorder that
+ * can produce a fixture for a source the queue cannot run.
+ */
+const SOURCES: Record<string, () => SourceAdapter<unknown>> = {
+  "youtube.search": () => createYouTubeAdapter("search") as SourceAdapter<unknown>,
+  "youtube.trending": () => createYouTubeAdapter("trending") as SourceAdapter<unknown>,
+  "tiktok.search": () => createTikTokAdapter("search") as SourceAdapter<unknown>,
+  "tiktok.explore": () => createTikTokAdapter("explore") as SourceAdapter<unknown>,
+}
+
+const sourceId = flag("source", "youtube.search")
+const make = SOURCES[sourceId]
+if (!make) {
+  console.error(`unknown --source=${sourceId}; one of ${Object.keys(SOURCES).join(", ")}`)
+  process.exit(2)
+}
+// A surface that takes no question — trending, explore — must not be refused for
+// not having one, and a search that has none must not open a session to ask it.
+const needsQuery = sourceId.endsWith(".search")
 const query = flag("query", "")
 const persona = {
   id: flag("persona", "record-cli"),
@@ -41,24 +67,31 @@ const persona = {
   locale: flag("locale", "vi-VN"),
   timezoneId: flag("tz", "Asia/Ho_Chi_Minh"),
 }
-const name = flag("name", `${surface}-${persona.locale}-${new Date().toISOString().slice(0, 10)}`)
+const name = flag(
+  "name",
+  `${sourceId.replace(".", "-")}-${persona.locale}-${new Date().toISOString().slice(0, 10)}`,
+)
+// Next to the adapter it belongs to, not in one shared folder: a fixture is read
+// by exactly one parser's test, and a `__fixtures__` directory holding four
+// sources' captures is one more thing to keep sorted by hand.
+const folder = sourceId.split(".")[0]
 const outDir = resolve(
   process.cwd(),
-  flag("out", "../../packages/samsara/sources/src/youtube/__fixtures__"),
+  flag("out", `../../packages/samsara/sources/src/${folder}/__fixtures__`),
 )
 
-if (surface === "search" && !query) {
+if (needsQuery && !query) {
   console.error("--query is required for a search capture; a session with no question is a bill")
   process.exit(2)
 }
 
-const adapter = createYouTubeAdapter(surface)
+const adapter = make()
 
 console.log(
   [
     "",
     `  source    ${adapter.id}`,
-    `  query     ${query || "(none — trending)"}`,
+    `  query     ${query || "(none — this surface takes no question)"}`,
     `  viewpoint ${persona.country} / ${persona.locale} / ${persona.timezoneId}`,
     `  fixture   ${outDir}/${name}.capture.json`,
     "",

@@ -1,6 +1,7 @@
 import type { Engagement } from "@samsara/core"
 import type { Capture, ItemDraft } from "../adapter.js"
-import { parseCount } from "./counts.js"
+import { parseCount } from "../counts.js"
+import { guessLanguage } from "../language.js"
 import type { YouTubePayload } from "./types.js"
 
 /**
@@ -153,26 +154,6 @@ function readEngagement(renderer: Record<string, unknown>): Engagement | null {
     parseCount(readText(renderer.shortViewCountText))
   if (views === null) return null
   return { views, likes: null, comments: null }
-}
-
-/**
- * A script detector, not a language detector, and the field it fills says
- * explicitly that it is not authoritative.
- *
- * Thai script means Thai; nothing else is written in it. Vietnamese is Latin, so
- * it is identified by the diacritics no other Latin-script language stacks the
- * same way (`ệ`, `ượ`, `ỗ`) — present in almost any real Vietnamese sentence and
- * in essentially no English one. Everything else returns null rather than
- * defaulting to `"en"`, because "probably English" is a claim, and the refinement
- * stage downstream can make a better one with a real model.
- */
-function guessLanguage(text: string): string | null {
-  if (/[฀-๿]/.test(text)) return "th"
-  if (/[Ạ-ỹăâêôơưđĂÂÊÔƠƯĐ]/.test(text)) return "vi"
-  if (/[぀-ヿ]/.test(text)) return "ja"
-  if (/[가-힯]/.test(text)) return "ko"
-  if (/[一-鿿]/.test(text)) return "zh"
-  return null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

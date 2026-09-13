@@ -531,6 +531,46 @@ Tasks:
   44 tests in `@samsara/sources`, **0 browser minutes spent**, seam allowances 0 of 5 across 103 files.
   See `casestudy_and_thinking/sessions/2026-09-13-p13-the-first-real-source.md`.
 - **P1.4** Adapter: **TikTok logged-out search/discover** with stealth + the P1.0 viewpoint (Thai query, `th-TH` locale, `Asia/Bangkok`, `sg` egress — there is no `th` egress, see ADR-0015). TikTok is the surface most likely to gate on IP geolocation, so this is where the gap shows up if it shows up; report it as a gap rather than working around it. Two strategies: rendered page scrape, then intercepted XHR JSON. Record sessions for first 20 runs.
+
+  ✅ **Done, same one step outstanding.** `tiktok.search` and `tiktok.explore`, two adapters over
+  one parser. The brief — "report the gap rather than working around it" — rules out more than it
+  rules in: there is no captcha solving, no signature forging, no rotating personas until one gets
+  through. The refusal *is* the measurement, and P1.0's result was measured on a surface that
+  honours `gl` and `hl`; whether it survives a surface that enforces geography is the open question.
+  1. **Three named refusals, not one.** `region-block` is the finding; `captcha` is a judgement
+     about this session and feeds persona health; `login-wall` applies to every logged-out visitor
+     and degrades a persona that did nothing wrong — an admitted cost, taken because a harvest that
+     silently returns nothing from behind a wall is worse. Collapsing them would make the
+     interesting one unrecoverable from the row.
+  2. **Both strategies always run.** The embedded state (`__UNIVERSAL_DATA_FOR_REHYDRATION__` or
+     `SIGI_STATE`) and the intercepted item-list API bodies fail on different days and cost nothing
+     to collect together. Choosing between them at capture time means choosing with the least
+     information anyone will ever have, inside the half that spends. The parser deduplicates them
+     by item id, state first, because state is the page as rendered.
+  3. **Recognition is structural, because TikTok does not name its items.** A digit-string `id`, a
+     `desc` that is a string, and an `author` or `stats`. Strict on purpose: a loose predicate
+     returns music tracks and hashtags as videos, and those get stored as evidence and scored.
+     `desc` is tested with `typeof`, not truthiness — an empty caption is a real video.
+  4. **`lang` is the only viewpoint parameter TikTok takes.** No `gl`. Region comes from the egress
+     IP alone, which is exactly why this adapter and not YouTube's tests ADR-0015's compromise.
+  5. **Two redaction entries removed for destroying content.** `signature` on a TikTok author is
+     the account bio — content, not a request signature. `userInfo` is the viewer in `SIGI_STATE`
+     and a result in the search API, and key-name redaction cannot tell them apart.
+  Also: `recording` is now a `harvest.run` payload field rather than an adapter property, because
+  "this adapter is new" is a fact about the calendar and encoding it in code means a deploy to turn
+  it off; `counts.ts` and `guessLanguage` moved to `src/` (TikTok returns counts as numbers from the
+  API and abbreviated strings from the rendered state); the recorder takes `--source` and writes
+  next to the adapter it belongs to.
+  **One correction worth carrying:** `guessLanguage`'s doc comment claimed Vietnamese diacritics
+  are "present in almost any real Vietnamese sentence". True of sentences, false of the four-word
+  captions it will actually be handed — `bánh mì ngon quá` contains nothing outside Latin-1. Not
+  fixed by widening the class, which would report Spanish as Vietnamese; fixed by correcting the
+  claim, asserting the limitation, and preferring the source's own language field.
+  **Not done, same decision as P1.3:** no live capture, so `tiktok.fixture.test.ts` does not exist
+  and nothing here has run against a real page. 77 tests in `@samsara/sources`, **0 browser minutes
+  spent**, seam allowances 0 of 5 across 111 files.
+  See `casestudy_and_thinking/sessions/2026-09-13-p14-the-surface-that-says-no.md`.
+
 - **P1.5** Adapter: **Google Maps reviews** for a caller-supplied list of areas; Phase 1 runs it on Thai-language areas (Ari, Charoenkrung, Talat Noi, Yaowarat), but the area list is a parameter, not a constant in the adapter. Extract review text in native script, reviewer language.
 - **P1.6** Adapter: **Pantip** (Thai forum) boards; board ids are a parameter. Plain HTML, good signal.
 - **P1.7** Persona Lab UI (`apps/web`, internal route `/lab`): list personas, create one for a locality/country, trigger a harvest, view RawItems side by side for two personas on the same query. This is the "tourist vs local" split screen. Rough UI is fine; correctness of the comparison is not. The Lab is an engine-facing tool that happens to live in the travel app: it talks about personas, sources, and queries, not about places.

@@ -11,6 +11,9 @@
 // file here that touches `node:fs`.
 
 export * from "./adapter.js"
+export * from "./counts.js"
+export * from "./language.js"
+export * from "./tiktok/index.js"
 export * from "./youtube/index.js"
 
 export const PACKAGE = "@samsara/sources" as const
