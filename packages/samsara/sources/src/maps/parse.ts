@@ -43,7 +43,7 @@ import type { MapsEntityNode, MapsPayload, MapsReviewNode } from "./types.js"
  * `0x<cell>:0x<entity>`. The second half is the entity; the first is the map cell it
  * sits in and changes nothing about identity.
  */
-const FEATURE_ID = /0x[0-9a-f]+:0x([0-9a-f]+)/i
+export const FEATURE_ID = /0x[0-9a-f]+:0x([0-9a-f]+)/i
 
 /** `url("https://…")` or `url(https://…)` inside a `style` attribute. */
 const CSS_URL = /url\(\s*["']?(https?:\/\/[^"')]+)/i
@@ -71,7 +71,47 @@ export function parseMaps(capture: Capture<MapsPayload>): readonly ItemDraft[] {
     drafts.push(draft)
   }
 
+  // A search Maps answered by resolving it. There are no cards to read, because the
+  // page we ended on *is* the answer, and the only evidence of what it is is the
+  // address and the title. One draft rather than zero — and, the part that matters, a
+  // URL `maps.reviews` can be handed, which is what a search capture is for.
+  if (payload.surface === "search" && payload.entities.length === 0 && entity !== null) {
+    if (!seen.has(entity)) {
+      drafts.push({
+        url: entity,
+        title: resolvedTitle(payload.pageTitle),
+        text: "",
+        languageGuess: guessLanguage(payload.pageTitle ?? ""),
+        mediaRefs: [],
+        engagement: null,
+      })
+    }
+  }
+
   return drafts
+}
+
+/**
+ * A tab title minus the product's own name.
+ *
+ * `ซ. พหลโยธิน 7 - Google Maps` is an entity and a suffix nobody asked for. Matched on
+ * "Google" rather than on "Maps", because the product half is localised in most places
+ * and the company half is not — and the whole title is kept when the pattern does not
+ * match, since a title with a stray suffix is a smaller error than one truncated by a
+ * rule that guessed.
+ */
+function resolvedTitle(pageTitle: string | null): string | null {
+  if (pageTitle === null) return null
+  const full = pageTitle.trim()
+  const stripped = full.replace(/\s*[-\u2013\u2014]\s*Google[^-\u2013\u2014]*$/u, "").trim()
+  if (stripped.length === 0) return null
+  // Nothing was stripped and the title starts with the company's name: this is the
+  // product's own title — `Google Maps`, `Google Карты` — on a page that never
+  // named an entity. A null says that; "Google Maps" as an item's title does not.
+  // An entity genuinely called `Google <something>` keeps its name, because its page
+  // title carries the suffix too and the strip above will have fired.
+  if (stripped === full && /^Google\b/u.test(full)) return null
+  return stripped
 }
 
 /**

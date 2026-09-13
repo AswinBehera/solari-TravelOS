@@ -290,6 +290,7 @@ describe("the shape of a read", () => {
         "nodeCounts",
         "reviews",
         "state",
+        "stateCandidates",
         "stateKeys",
         "stateLength",
         "tabLabels",

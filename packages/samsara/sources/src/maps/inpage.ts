@@ -36,6 +36,7 @@ export interface MapsPageRead {
   state: string | null
   stateLength: number | null
   stateKeys: string[]
+  stateCandidates: string[]
   tabLabels: string[]
   nodeCounts: Record<string, number>
   /** What kind of wall, not merely that there is one. See `capture.ts`. */
@@ -77,6 +78,25 @@ export function readMapsPage(): MapsPageRead {
     stateLength = text.length
     state = text.slice(0, 200000)
   }
+
+  /**
+   * What the blob is *actually* called, when none of the three names above is it.
+   *
+   * The first real capture came back with `stateKeys` empty: all three guesses were
+   * wrong on that build. Guessing a fourth name costs another browser session, so the
+   * page is asked instead. Names only — never values — filtered to the shape a state
+   * global has, sorted so two captures can be compared, and capped so a page with a
+   * thousand globals cannot turn a diagnostic into the payload.
+   */
+  const stateCandidates: string[] = []
+  for (const key of Object.keys(globals)) {
+    if (stateCandidates.length >= 200) break
+    if (/^(?:APP_|_page|WIZ_|AF_|GM_)/.test(key) || /^[A-Z][A-Z0-9_]{7,}$/.test(key)) {
+      stateCandidates.push(key)
+    }
+  }
+  stateCandidates.sort()
+  stateCandidates.length = Math.min(stateCandidates.length, 40)
 
   const tabLabels: string[] = []
   for (const tab of Array.from(document.querySelectorAll('[role="tab"]'))) {
@@ -230,6 +250,7 @@ export function readMapsPage(): MapsPageRead {
     state,
     stateLength,
     stateKeys,
+    stateCandidates,
     tabLabels,
     nodeCounts: { ...nodeCounts, bodyTextLength: text.length },
     wall,

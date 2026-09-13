@@ -2,9 +2,40 @@
 
 Phase: 1 — in progress. Phase 0 is **complete, pending the gate** (below; the gate is a human
 review and does not block buildable work).
-Last completed: **P1.5 — the Google Maps adapter.** `maps.search` and `maps.reviews`, registered in
-`apps/worker` alongside the YouTube and TikTok pairs. 191 tests in `@samsara/sources` (66 new),
-**0 browser minutes spent**, seam allowances **0 of 5** across 125 files.
+Last completed: **P1.5 — the Google Maps adapter**, plus **one live capture that came back
+refused**. `maps.search` and `maps.reviews`, registered in `apps/worker` alongside the YouTube and
+TikTok pairs. 209 tests in `@samsara/sources` (84 new), **0.270 browser minutes spent**, seam
+allowances **0 of 5** across 127 files.
+
+**The one capture found a third outcome, and it was not the one I was watching for.** Asking
+`อารีย์` from a `th-TH` persona did not return a result list: Maps decided a one-word Thai area name
+was unambiguous, resolved it to the street that names the area, and navigated to that entity's own
+page. No result cards, and on that build no state blob either — every structural signal the refusal
+rule had said *blocked*, and nothing had gone wrong. The rule is now *a search with no cards and no
+blob is a refusal **unless** the landing address carries a feature id*, and `parse` emits one draft
+for the resolved entity. That draft's real value is not the item: it is a **valid input to
+`maps.reviews`**, which is the whole reason the search surface is a separate adapter. A session that
+produced zero usable outputs now produces the one output the chain consumes.
+
+**The identity mechanism proved out on real bytes, in a use it was not designed for.** The `0x…:0x…`
+→ `cid` conversion was built for P1.8's overlap measurement; it is also the only part of a Maps
+address readable without understanding the rest of it, which is what makes "resolved" legible at
+all. `https://maps.google.com/?cid=7848097478468591393`, from the live URL, first try.
+
+**All three names for the state blob were wrong** — `stateKeys` came back empty. The diagnostic did
+its job and then stopped one question short: it reports which guesses were present, not what is
+actually there. Added `stateCandidates`, which reports `window` key *names* matching a state-global
+shape, sorted and capped, values never leaving the page. Third time this shape has come up, so it is
+worth stating as a rule: **a diagnostic that reports whether you were right is worth one session; a
+diagnostic that reports what the right answer is, is worth all of them.**
+
+**`gl` did not survive the navigation** — sent, absent from the landing URL, while `hl` came through.
+P1.3's `persist_gl` finding on a different source. Not acted on (region plausibly comes from the
+egress IP, as on TikTok) but now asserted, so the day it changes something fails and says so.
+
+**What the capture did not buy**: no review and no result card has ever been read by this parser, so
+every selector in `inpage.ts` is still a guess. `fixture.test.ts` says so in its own header. See
+`casestudy_and_thinking/sessions/2026-09-13-p15b-the-answer-was-in-the-address-bar.md`.
 
 **Maps has no names, so the strategy that made the last two adapters writable blind does not
 transfer.** YouTube tags its results with renderer names and TikTok's items are at least keyed
@@ -239,15 +270,13 @@ allows of five**. A third finding fell out of the live run — `Asia/Ho_Chi_Minh
 viewpoint check was reporting a false negative. Before that, **P0.7** (the seam check),
 **P0.6** (dev ergonomics) and **P0.5** (the queue and the two runtimes); all three were
 committed this session, having lived only in the working tree until now.
-NEXT: **a live Maps capture**, which is a decision rather than a task — one browser session, about a
-cent against the 4,000-minute ceiling, and the bytes committed to a public repo (see the top of this
-file). YouTube and TikTok already have theirs: both were recorded, audited by shape and checked in
-at the end of P1.4, and `fixture.test.ts` in each folder parses the real bytes through the shipped
-adapter. Maps has none, and it is the adapter where a fixture is worth most — its selectors are a
-guess in a way the other two adapters' key names are not, and the diagnostics (`tabLabels`,
-`nodeCounts`, `stateKeys`) exist to make one session answer every question about them, including a
-session that comes back refused. The recorder takes `--source=maps.search` or `--source=maps.reviews`
-and needs `--query` for both. After it, **P1.6** (Pantip).
+NEXT: **P1.6 (Pantip)** — or, first, **one `maps.reviews` capture**, which is a decision rather than
+a task. All three adapters now have a recorded fixture, but the Maps one is of a page with no items
+on it, so the nine selector plans in `reviewPlan` remain entirely unmeasured. One session against
+`https://maps.google.com/?cid=7848097478468591393` (the entity the last capture resolved to) answers
+`nodeCounts`, `tabLabels`, `tabOpened` and `stateCandidates` at once, including if it comes back
+refused. A street is a poor thing to ask for reviews of, so a named business in Ari is the better
+query — and that also tests whether the search surface ever returns a list.
 And **the Phase 0 gate** (see below), whose fourth question — P1.0 measured the signal stack and it
 does not match ADR-0015's ordering — is still open. Gate question 1 (`Viewpoint`'s shape) is now
 answered in code: `{country, locale, timezoneId}`, stored on the persona row and read straight

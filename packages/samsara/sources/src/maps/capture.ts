@@ -6,6 +6,10 @@ import {
   readMapsPage,
   scrollMapsPane,
 } from "./inpage.js"
+// The identity regex, and only the regex. `capture` does not parse — but it does have
+// to tell "Maps refused" apart from "Maps resolved", and that difference is a feature
+// id in the landing address. One shared pattern rather than two that drift.
+import { FEATURE_ID } from "./parse.js"
 import type { MapsPayload, MapsSurface } from "./types.js"
 
 /**
@@ -228,6 +232,7 @@ export async function captureMaps(
     scrolls,
     nodeCounts: read.nodeCounts,
     stateKeys: read.stateKeys,
+    stateCandidates: read.stateCandidates,
     observedPaths: [...observed].sort(),
     strategies: {
       state: read.state !== null,
@@ -276,7 +281,20 @@ function refusal(
     }
   }
   if (surface === "search" && read.entities.length === 0 && read.state === null) {
-    return `no result card and no state (title: ${read.title || "none"})`
+    // Unless Maps answered the question by resolving it.
+    //
+    // A one-word area name is often not ambiguous enough to deserve a list: the first
+    // real capture asked for `อารีย์` and was taken straight to one entity's own page,
+    // which has no result cards on it and, on that build, no blob either. Every
+    // structural signal said refused, and nothing had gone wrong — Maps had simply
+    // answered, and the answer was in the address bar.
+    //
+    // The feature id is what makes that legible without reading the page, which is
+    // the second time identity-by-id has paid for itself on a surface where nothing
+    // can be read positionally.
+    if (!FEATURE_ID.test(read.href)) {
+      return `no result card and no state (title: ${read.title || "none"})`
+    }
   }
   return undefined
 }

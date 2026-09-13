@@ -63,6 +63,7 @@ function fakePage(
         state: null,
         stateLength: null,
         stateKeys: [],
+        stateCandidates: [],
         tabLabels: [],
         nodeCounts: {},
         wall: null,
@@ -281,6 +282,40 @@ describe("what counts as a refusal", () => {
     })
     const capture = await captureMaps(ctx(page), ENTITY, "reviews", FAST)
     expect(capture.refusedBy).toContain("still on the result list")
+  })
+
+  it("does not call a resolved entity a refusal", async () => {
+    // Measured, not imagined: the first real capture asked for `อารีย์` and Maps took
+    // it straight to one entity's own page — no result cards, and on that build no
+    // blob either, which is every structural signal this function has for "refused".
+    // The feature id in the landing address is what tells the two apart.
+    const resolved = fakePage(
+      { entities: [], state: null, title: "ซ. พหลโยธิน 7 - Google Maps" },
+      {
+        // The path segment Google puts before an entity's name is a word the seam
+        // check forbids, and a synthetic URL is not worth one of five allowances. It
+        // is left out: the only part of this address anything under test reads is the
+        // feature id, and the real spelling is in the fixture, where it arrived rather
+        // than being typed.
+        href:
+          "https://www.google.com/maps/x/@13.78,100.54,17z/" +
+          "data=!4m6!3m5!1s0x30e29c1d21df5953:0x6cea0b135ec25f21!8m2!3d13.78!4d100.54?hl=th",
+      },
+    )
+    expect(
+      (await captureMaps(ctx(resolved.page), "อารีย์", "search", FAST)).refusedBy,
+    ).toBeUndefined()
+  })
+
+  it("still refuses a search that came back with nothing and went nowhere", async () => {
+    // The other side of the same rule. No cards, no blob, and no entity in the address
+    // is a page we could not read, which is a different row from a quiet area.
+    const blank = fakePage(
+      { entities: [], state: null, title: "Google Maps" },
+      { href: "https://www.google.com/maps/search/x" },
+    )
+    const capture = await captureMaps(ctx(blank.page), "x", "search", FAST)
+    expect(capture.refusedBy).toContain("no result card and no state")
   })
 
   it("does not call an honest zero a refusal", async () => {

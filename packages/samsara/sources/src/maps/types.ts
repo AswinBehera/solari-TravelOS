@@ -82,6 +82,11 @@ export interface MapsPayload {
   nodeCounts: Readonly<Record<string, number>>
   /** Which globals were present on `window`, by name. See `stateKeys` in `inpage.ts`. */
   stateKeys: readonly string[]
+  /**
+   * Globals whose *names* look like a state blob, when none of the expected ones was
+   * there. The answer to "then what is it called", bought by a capture that failed.
+   */
+  stateCandidates: readonly string[]
   /** Every response path the page requested, deduplicated and sorted. Paths only. */
   observedPaths: readonly string[]
   strategies: {

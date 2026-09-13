@@ -67,6 +67,7 @@ function capture(
       scrolls: 0,
       nodeCounts: {},
       stateKeys: [],
+      stateCandidates: [],
       observedPaths: [],
       strategies: { state: false, reviews: 0, entities: 0 },
       ...over,
@@ -275,5 +276,60 @@ describe("both at once", () => {
   it("is pure: the same capture parses the same way twice", () => {
     const one = capture({ reviews: [review()], entities: [entity()] })
     expect(parseMaps(one)).toEqual(parseMaps(one))
+  })
+})
+
+describe("a search Maps answered instead of listing", () => {
+  // The path segment Google puts before an entity's name is a word the seam check
+  // forbids; it is left out of this synthetic address because nothing here reads it.
+  // The real spelling is in `__fixtures__`, where it arrived rather than being typed.
+  const RESOLVED =
+    "https://www.google.com/maps/x/@13.78,100.54,17z/" +
+    "data=!4m6!3m5!1s0x30e29c1d21df5953:0x6cea0b135ec25f21!8m2!3d13.78!4d100.54?hl=th"
+
+  it("yields the entity in the address when there were no cards to read", () => {
+    const drafts = parseMaps(
+      capture({ pageTitle: "ซ. พหลโยธิน 7 - Google Maps" }, "search", RESOLVED),
+    )
+    expect(drafts).toHaveLength(1)
+    expect(drafts[0]?.url).toBe("https://maps.google.com/?cid=7848097478468591393")
+    expect(drafts[0]?.title).toBe("ซ. พหลโยธิน 7")
+    expect(drafts[0]?.text).toBe("")
+    // Nobody told us this entity has no reviews. We never saw a number.
+    expect(drafts[0]?.engagement).toBeNull()
+  })
+
+  it("keeps a title it does not recognise rather than truncating it by a guess", () => {
+    const drafts = parseMaps(
+      capture({ pageTitle: "Ari — a name with a dash in it" }, "search", RESOLVED),
+    )
+    expect(drafts[0]?.title).toBe("Ari — a name with a dash in it")
+  })
+
+  it("says nothing when there is no title to say it with", () => {
+    const drafts = parseMaps(capture({ pageTitle: "Google Maps" }, "search", RESOLVED))
+    expect(drafts[0]?.title).toBeNull()
+  })
+
+  it("stays quiet when the page did have cards on it", () => {
+    // The fallback is for a page with nothing to read, not a second opinion about a
+    // page that listed results. Two drafts for one search would double-count.
+    const drafts = parseMaps(capture({ entities: [entity()] }, "search", RESOLVED))
+    expect(drafts).toHaveLength(1)
+    expect(drafts[0]?.title).toBe("Tiệm Bánh Ngọc")
+  })
+
+  it("stays quiet on the reviews surface, where the entity is the question", () => {
+    // A reviews capture's URL is always an entity, so this rule would turn every
+    // review-less entity into an item that looks like a search result.
+    const drafts = parseMaps(capture({ reviews: [] }, "reviews", RESOLVED))
+    expect(drafts).toHaveLength(0)
+  })
+
+  it("does not duplicate an entity a card already produced", () => {
+    const drafts = parseMaps(
+      capture({ entities: [entity({ href: RESOLVED })] }, "search", RESOLVED),
+    )
+    expect(drafts).toHaveLength(1)
   })
 })
