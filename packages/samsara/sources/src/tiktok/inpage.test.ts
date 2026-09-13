@@ -81,6 +81,47 @@ afterEach(() => {
   saved.clear()
 })
 
+/**
+ * The body, with comments and string literals removed.
+ *
+ * The body and not the whole source, because the declaration itself is spelled
+ * `function readTikTokState()`. Comments and literals go because the assertions
+ * below look for the *word* `function` and the token `=>`, and this file's own
+ * prose is full of the first.
+ */
+function body(fn: () => unknown): string {
+  const source = fn.toString()
+  return source
+    .slice(source.indexOf("{"))
+    .replace(/\/\*[\s\S]*?\*\//g, " ")
+    .replace(/\/\/[^\n]*/g, " ")
+    .replace(/(['"`])(?:\\.|(?!\1)[^\\])*\1/g, '""')
+}
+
+describe("the shape that survives serialisation", () => {
+  /**
+   * Not a style rule. `tsx`, which is what runs the recorder, compiles a named
+   * function expression to `__name(fn, "usable")` with `__name` declared once at
+   * module scope — so a helper declared *inside* the evaluated function is still a
+   * reference to something that does not cross. The third billed session of this
+   * fixture went to `ReferenceError: __name is not defined`, immediately after the
+   * second went to `ReferenceError: usable is not defined`.
+   *
+   * The only shape that survives is one with no function of its own, so that is
+   * what is asserted, at the source level where it is actually checkable.
+   */
+  it("declares no function of its own", () => {
+    const source = body(readTikTokState)
+    expect(source).not.toMatch(/=>/)
+    expect(source).not.toMatch(/\bfunction\b/)
+    expect(source).not.toMatch(/\bclass\b/)
+  })
+
+  it("carries no bundler helper into the page", () => {
+    expect(readTikTokState.toString()).not.toContain("__name")
+  })
+})
+
 describe("readTikTokState", () => {
   it("reads the script tag, not the global of the same name", () => {
     // No `globals` entry: the only thing named `__UNIVERSAL_DATA_FOR_REHYDRATION__`

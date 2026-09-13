@@ -24,26 +24,6 @@ export interface TikTokPageRead {
 }
 
 export function readTikTokState(): TikTokPageRead {
-  /**
-   * Is this a state object, or is it the script tag the state was supposed to be in?
-   *
-   * **Declared inside the function**, which is the rule this file's header states
-   * and which I broke on the first attempt at the fix: Playwright serialises the
-   * function source and nothing else, so a call to a module-scope helper is a
-   * `ReferenceError` in the page — on a clock that is already billing. It cost a
-   * session (0.144 min) to relearn, reported as `internal: unhandled kernel error`
-   * because the underlying message never reached the operator.
-   *
-   * `instanceof Node` and not a duck-typed check: the whole point is to reject a
-   * thing that answers to `typeof === "object"` and would cross the evaluate
-   * boundary as an unusable reference.
-   */
-  const usable = (value: unknown): boolean => {
-    if (value === null || typeof value !== "object" || Array.isArray(value)) return false
-    if (value instanceof Node) return false
-    return Object.keys(value).length > 0
-  }
-
   const globals = window as unknown as {
     __UNIVERSAL_DATA_FOR_REHYDRATION__?: unknown
     SIGI_STATE?: unknown
@@ -53,9 +33,9 @@ export function readTikTokState(): TikTokPageRead {
   // `__UNIVERSAL_DATA_FOR_REHYDRATION__` and still serves the old shape to some
   // user agents, so both are read rather than one being assumed current.
   //
-  // **The script tag is read before the global, and the global is checked for
-  // being a DOM node.** Both of these names are the `id` of a `<script>` tag, and
-  // HTML's named access on `window` means `window.__UNIVERSAL_DATA_FOR_REHYDRATION__`
+  // **The script tag is read before the global, and a candidate that is a DOM node
+  // is rejected.** Both of these names are the `id` of a `<script>` tag, and HTML's
+  // named access on `window` means `window.__UNIVERSAL_DATA_FOR_REHYDRATION__`
   // evaluates to *that script element* whenever no real property shadows it. The
   // first version of this function read the globals first and took the first
   // non-null answer, so it always got the element, never descended to the tag it
@@ -65,26 +45,40 @@ export function readTikTokState(): TikTokPageRead {
   // the string `ref: <Node>`. A null would have been caught by the refusal check
   // on the first run; an element was worse than nothing precisely because it was
   // truthy.
+  //
+  // **The test is written out twice rather than put in a helper**, and that is not
+  // a style choice. This function is serialised and evaluated in the page, so it
+  // may not close over module scope — and a helper declared *inside* it does not
+  // help either, because the bundler that ships this code rewrites named functions
+  // as `__name(fn, "usable")` and `__name` lives at module scope. Two sessions
+  // went to learning that in order: first `ReferenceError: usable is not defined`,
+  // then `ReferenceError: __name is not defined`. The only shape that survives
+  // serialisation is one with no function of its own in it. `inpage.test.ts` asserts that
+  // shape, because a comment saying it is not a check that it is true.
   let state: unknown = null
   for (const id of ["__UNIVERSAL_DATA_FOR_REHYDRATION__", "SIGI_STATE"]) {
+    const candidates: unknown[] = []
+
     const tag = document.getElementById(id)
     if (tag?.textContent) {
       try {
-        const parsed: unknown = JSON.parse(tag.textContent)
-        if (usable(parsed)) {
-          state = parsed
-          break
-        }
+        candidates.push(JSON.parse(tag.textContent))
       } catch {
-        // Not JSON. Fall through to the global, which may hold the live object.
+        // Not JSON. The global may still hold the live object.
       }
     }
-    const global =
-      id === "SIGI_STATE" ? globals.SIGI_STATE : globals.__UNIVERSAL_DATA_FOR_REHYDRATION__
-    if (usable(global)) {
-      state = global
+    candidates.push(
+      id === "SIGI_STATE" ? globals.SIGI_STATE : globals.__UNIVERSAL_DATA_FOR_REHYDRATION__,
+    )
+
+    for (const candidate of candidates) {
+      if (candidate === null || typeof candidate !== "object") continue
+      if (Array.isArray(candidate) || candidate instanceof Node) continue
+      if (Object.keys(candidate).length === 0) continue
+      state = candidate
       break
     }
+    if (state !== null) break
   }
 
   const text = document.body?.innerText?.slice(0, 4_000) ?? ""
