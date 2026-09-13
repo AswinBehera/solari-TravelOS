@@ -2,6 +2,7 @@ import { resolve } from "node:path"
 import {
   type Capture,
   createMapsAdapter,
+  createPantipAdapter,
   createTikTokAdapter,
   createYouTubeAdapter,
   harvest,
@@ -66,6 +67,21 @@ const SOURCES: Record<string, (settleMs?: number) => SourceAdapter<unknown>> = {
   "maps.reviews": (settleMs) =>
     createMapsAdapter(
       "reviews",
+      settleMs === undefined ? {} : { settleMs },
+    ) as SourceAdapter<unknown>,
+  "pantip.forum": (settleMs) =>
+    createPantipAdapter(
+      "forum",
+      settleMs === undefined ? {} : { settleMs },
+    ) as SourceAdapter<unknown>,
+  "pantip.tag": (settleMs) =>
+    createPantipAdapter(
+      "tag",
+      settleMs === undefined ? {} : { settleMs },
+    ) as SourceAdapter<unknown>,
+  "pantip.topic": (settleMs) =>
+    createPantipAdapter(
+      "topic",
       settleMs === undefined ? {} : { settleMs },
     ) as SourceAdapter<unknown>,
 }

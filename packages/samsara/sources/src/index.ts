@@ -14,6 +14,7 @@ export * from "./adapter.js"
 export * from "./counts.js"
 export * from "./language.js"
 export * from "./maps/index.js"
+export * from "./pantip/index.js"
 export * from "./tiktok/index.js"
 export * from "./youtube/index.js"
 

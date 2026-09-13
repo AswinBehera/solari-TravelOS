@@ -11,19 +11,11 @@ import {
 } from "@samsara/kernel/postgres"
 import { createSolariBrowserLauncher, solariCredentials } from "@samsara/kernel/solari"
 import { PostgresPersonaStore } from "@samsara/personas/postgres"
-import type { SourceAdapter } from "@samsara/sources"
-import {
-  mapsReviews,
-  mapsSearch,
-  tiktokExplore,
-  tiktokSearch,
-  youtubeSearch,
-  youtubeTrending,
-} from "@samsara/sources"
 import { HandlerRegistry, noopHandler } from "./handlers.js"
 import { createHarvestHandler } from "./harvest.js"
 import { createPackRegistry } from "./packs.js"
 import { createKeepaliveHandler } from "./personas.js"
+import { sourceRegistry } from "./sources.js"
 
 /**
  * Everything the runner needs, assembled once at boot.
@@ -86,17 +78,8 @@ export function boot(env: NodeJS.ProcessEnv = process.env): Boot {
     }),
   )
 
-  // Registered by name, not discovered. Every entry here is a source this
-  // deployment can be told to spend money on, so the list is a line somebody wrote
-  // rather than whatever happened to be importable.
-  const sources = new Map<string, SourceAdapter<unknown>>([
-    [youtubeSearch.id, youtubeSearch as SourceAdapter<unknown>],
-    [youtubeTrending.id, youtubeTrending as SourceAdapter<unknown>],
-    [tiktokSearch.id, tiktokSearch as SourceAdapter<unknown>],
-    [tiktokExplore.id, tiktokExplore as SourceAdapter<unknown>],
-    [mapsSearch.id, mapsSearch as SourceAdapter<unknown>],
-    [mapsReviews.id, mapsReviews as SourceAdapter<unknown>],
-  ])
+  // The registry is in `sources.ts`, where a test can reach it. See that file.
+  const sources = sourceRegistry()
 
   handlers.register(
     "harvest.run",

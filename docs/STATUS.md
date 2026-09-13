@@ -2,7 +2,75 @@
 
 Phase: 1 — in progress. Phase 0 is **complete, pending the gate** (below; the gate is a human
 review and does not block buildable work).
-Last completed: **P1.5 — the Google Maps adapter**, plus **one live capture that came back
+Last completed: **P1.6 — the Pantip adapter**. `pantip.forum`, `pantip.tag` and `pantip.topic`,
+registered in `apps/worker` alongside the YouTube, TikTok and Maps pairs — nine source ids in the
+recorder. 264 tests in `@samsara/sources` (55 new), **0 browser minutes spent**, seam allowances
+**0 of 5** across 135 files.
+
+**The design answers the question P1.5 left open: what a wrong selector costs.** On Maps it costs a
+browser session, because every field is read inside `page.evaluate` and the bytes that come back are
+only what the selectors found. Pantip is server-rendered plain HTML, so the capture stores the
+extracted fields **and the markup each one came from** — a wrong selector becomes a re-parse of
+bytes already held. Capped at 30 fragments of 3,000 characters (~90 KB) against `fixture.ts`'s
+standing warning that a 2 MB fixture is one nobody reviews, with scripts, styles and frames stripped
+*in the page* before the fragment is taken: the markup around a post is content, and an inline
+script inside it is where a token would be.
+
+**Shape redaction again, and the licence for it is written into the constant.** A pattern list is a
+denylist, which this file has called the problem twice. It is admissible here only because nothing
+reads the two fields it guards — the state blob and the fragments are write-only today, so a false
+positive costs nothing. A test asserts the weakness on purpose: an unnamed `sessionid=…` passes
+straight through. The day something parses a fragment, the argument has to be made again.
+
+**It clicks nothing, and navigates nowhere that is not Pantip.** A selector loose enough to find an
+unseen "more comments" control is loose enough to press something else, so the candidates are
+counted into `nodeCounts` instead — one step more cautious than the Maps tab index. `pantip.topic`
+takes its query as an address and that query arrives from a previous capture, so a board id must
+match a slug and a topic must be a number or an `https://` Pantip URL, query string dropped.
+
+**Three real bugs, all found by laying the fixture HTML out the way the page actually is.** The
+opening post's byline sits *beside* its body, not inside it — so every field but `text` came back
+null and the stored fragment was cropped too small to repair it, which is a cap that defeats the
+thing it caps. Fixing that exposed the second: the opening post's wrapper is called
+`display-post-wrapper-inner` and a reply is `display-post-wrapper`, so the looser reply selector
+matched the opening post's own box and stored it twice; the nesting guard checked only one
+direction, and overlap in *either* direction is one post. Third, a class-substring selector has
+decoys — `[class*="view"]` matches `pt-preview` — and requiring a digit then skipping to the next
+*selector* rather than the next *match* lost the field entirely.
+
+**Posts are emitted before listing rows, and that ordering is not cosmetic.** A topic page links
+itself, so a row and the opening post resolve to the same URL — which is the point of building
+identity from the topic number. First draft wins the id, and the row (a title and an excerpt) was
+displacing the post (the writing and the images). Nothing failed; the evidence was just quietly the
+worse of the two.
+
+**The seam check fired on `Asia/Bangkok` in a test persona, and the right fix was to notice the
+field was not needed.** Assembling the string at runtime would defeat our own tripwire; a
+`seam:allow` would spend one of five on a file with no need of it. Pantip takes **no viewpoint
+parameter at all** — no `hl`, no `gl`, no `lang` — so the persona reaches this source only through
+the egress address and the browser's own headers. That makes it the cleanest test in the set of
+whether a rented egress is worth anything alone, and the one source where P1.0's "query language
+dominates" finding cannot apply, since every query and every answer is in one language.
+
+**One surface beyond the plan's letter.** `PLAN.md` says "boards; board ids are a parameter"; there
+is also `pantip.tag`, because Phase 1's inputs are Thai area names and an area on Pantip is a tag —
+the boards are named after streets in the capital. It costs one URL builder and shares the listing
+parser. `pantip.topic` is split from the listings for the reason the Maps pair is split: one
+`capture()` that listed a board and opened every topic on it is a session of unbounded length.
+
+**A fourth bug, in the wiring rather than the adapter, and it is the one worth a guard.** The three
+adapters went into `record-capture.ts` and not into `boot.ts` — two hand-written lists of the same
+thing, neither derivable from the other, and an adapter in one and not the other is not a type
+error. `pnpm check` stayed green at 26/26 and it was caught by eye. The registry now lives in
+`apps/worker/src/sources.ts` with `sources.test.ts` comparing it against the recorder's list and
+against a written-down set of ids, because a deployment that quietly stops being able to run a
+source reports no error and produces no evidence.
+
+**What it did not buy**: nothing here has run against Pantip's real markup, so every selector is
+still a guess. The difference from P1.5 is what the first capture costs to correct. See
+`casestudy_and_thinking/sessions/2026-09-13-p16-the-fragment-that-pays-for-the-next-wrong-guess.md`.
+
+Before that: **P1.5 — the Google Maps adapter**, plus **one live capture that came back
 refused**. `maps.search` and `maps.reviews`, registered in `apps/worker` alongside the YouTube and
 TikTok pairs. 209 tests in `@samsara/sources` (84 new), **0.270 browser minutes spent**, seam
 allowances **0 of 5** across 127 files.
@@ -270,13 +338,14 @@ allows of five**. A third finding fell out of the live run — `Asia/Ho_Chi_Minh
 viewpoint check was reporting a false negative. Before that, **P0.7** (the seam check),
 **P0.6** (dev ergonomics) and **P0.5** (the queue and the two runtimes); all three were
 committed this session, having lived only in the working tree until now.
-NEXT: **P1.6 (Pantip)** — or, first, **one `maps.reviews` capture**, which is a decision rather than
-a task. All three adapters now have a recorded fixture, but the Maps one is of a page with no items
-on it, so the nine selector plans in `reviewPlan` remain entirely unmeasured. One session against
-`https://maps.google.com/?cid=7848097478468591393` (the entity the last capture resolved to) answers
-`nodeCounts`, `tabLabels`, `tabOpened` and `stateCandidates` at once, including if it comes back
-refused. A street is a poor thing to ask for reviews of, so a named business in Ari is the better
-query — and that also tests whether the search surface ever returns a list.
+NEXT: **P1.7 (Persona Lab UI)** — or, first, **one or two live captures**, which is a decision to
+spend rather than a task. Two are now worth roughly the same and answer different questions.
+A `pantip.tag` or `pantip.topic` capture is the cheaper and more informative of the two: every
+selector in `pantip/inpage.ts` is a guess, the fragments are the mechanism that is supposed to make
+a wrong guess a re-parse instead of a session, and that mechanism is itself untested until one real
+page has been through it. A `maps.reviews` capture against a **named business in Ari** (a street is
+a poor thing to ask for reviews of) leaves the nine selector plans in `reviewPlan` measured, and
+also tests whether the search surface ever returns a list.
 And **the Phase 0 gate** (see below), whose fourth question — P1.0 measured the signal stack and it
 does not match ADR-0015's ordering — is still open. Gate question 1 (`Viewpoint`'s shape) is now
 answered in code: `{country, locale, timezoneId}`, stored on the persona row and read straight
@@ -286,8 +355,9 @@ truncate *each other* — a Postgres advisory lock in `@samsara/db/testing` seri
 processes. They still truncate the same database `pnpm dev` drains, which remains an architect's
 call: harmless while the dev data is disposable, and not the day it is not. The lock makes the
 suite correct; it does not make the choice of database correct.
-Also unresolved: no live capture has been recorded, so nothing in `@samsara/sources` has been
-executed against a real page. The `CaptureArchive` decision is still live (no Supabase
+Also unresolved: `@samsara/sources` has three recorded fixtures (YouTube, TikTok, Maps) and three
+adapters with none — `pantip.forum`, `pantip.tag` and `pantip.topic` have never been executed
+against a real page. The `CaptureArchive` decision is still live (no Supabase
 credentials), and `FilesystemCaptureArchive` is an explicit stand-in that does not survive an
 Actions runner.
 Branch: main
