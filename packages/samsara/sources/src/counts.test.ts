@@ -71,3 +71,38 @@ describe("parseCount, the tail", () => {
     expect(parseCount("12 views, uploaded by a k-pop channel")).toBe(12)
   })
 })
+
+describe("parseCount, the word that starts with a scale word", () => {
+  /**
+   * Found by a Maps review count in the language this project targets, not by a
+   * test written to probe the rule. `231 bài đánh giá` came back as 231 billion,
+   * because the tail is anchored — which the test above establishes — but `b` is a
+   * whole scale word and `bài` starts with it.
+   *
+   * The answer being wrong by a factor of a billion is the lucky version. The same
+   * collision on `m`, `k` or `tr` produces a number that looks plausible, ranks
+   * content, and is never questioned. That is the failure `counts.ts` exists to
+   * avoid, so the gap was worth closing where the table lives rather than in the
+   * adapter that tripped over it.
+   */
+  it("does not read a Vietnamese word as an English abbreviation", () => {
+    expect(parseCount("231 bài đánh giá")).toBe(231)
+    expect(parseCount("12 bình luận")).toBe(12)
+    expect(parseCount("5 món")).toBe(5)
+  })
+
+  it("still scales when the word really is the scale word", () => {
+    expect(parseCount("1.2M views")).toBe(1_200_000)
+    expect(parseCount("3bn views")).toBe(3_000_000_000)
+    expect(parseCount("1,2 Tr lượt xem")).toBe(1_200_000)
+    expect(parseCount("4 triệu lượt xem")).toBe(4_000_000)
+  })
+
+  it("leaves Thai alone, which is written without the boundary this rule uses", () => {
+    // `1.2 ล้านครั้ง` has a letter immediately after the scale word and is correct.
+    // A general boundary rule would have broken the language the table was written
+    // for, which is why the rule applies to Latin-script entries only.
+    expect(parseCount("1.2 ล้านครั้ง")).toBe(1_200_000)
+    expect(parseCount("3 หมื่นครั้ง")).toBe(30_000)
+  })
+})

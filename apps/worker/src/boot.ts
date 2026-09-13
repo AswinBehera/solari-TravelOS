@@ -12,7 +12,14 @@ import {
 import { createSolariBrowserLauncher, solariCredentials } from "@samsara/kernel/solari"
 import { PostgresPersonaStore } from "@samsara/personas/postgres"
 import type { SourceAdapter } from "@samsara/sources"
-import { tiktokExplore, tiktokSearch, youtubeSearch, youtubeTrending } from "@samsara/sources"
+import {
+  mapsReviews,
+  mapsSearch,
+  tiktokExplore,
+  tiktokSearch,
+  youtubeSearch,
+  youtubeTrending,
+} from "@samsara/sources"
 import { HandlerRegistry, noopHandler } from "./handlers.js"
 import { createHarvestHandler } from "./harvest.js"
 import { createPackRegistry } from "./packs.js"
@@ -87,6 +94,8 @@ export function boot(env: NodeJS.ProcessEnv = process.env): Boot {
     [youtubeTrending.id, youtubeTrending as SourceAdapter<unknown>],
     [tiktokSearch.id, tiktokSearch as SourceAdapter<unknown>],
     [tiktokExplore.id, tiktokExplore as SourceAdapter<unknown>],
+    [mapsSearch.id, mapsSearch as SourceAdapter<unknown>],
+    [mapsReviews.id, mapsReviews as SourceAdapter<unknown>],
   ])
 
   handlers.register(

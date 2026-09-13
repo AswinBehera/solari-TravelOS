@@ -1,6 +1,7 @@
 import { resolve } from "node:path"
 import {
   type Capture,
+  createMapsAdapter,
   createTikTokAdapter,
   createYouTubeAdapter,
   harvest,
@@ -57,6 +58,16 @@ const SOURCES: Record<string, (settleMs?: number) => SourceAdapter<unknown>> = {
       "explore",
       settleMs === undefined ? {} : { settleMs },
     ) as SourceAdapter<unknown>,
+  "maps.search": (settleMs) =>
+    createMapsAdapter(
+      "search",
+      settleMs === undefined ? {} : { settleMs },
+    ) as SourceAdapter<unknown>,
+  "maps.reviews": (settleMs) =>
+    createMapsAdapter(
+      "reviews",
+      settleMs === undefined ? {} : { settleMs },
+    ) as SourceAdapter<unknown>,
 }
 
 const sourceId = flag("source", "youtube.search")
@@ -81,8 +92,12 @@ if (!make) {
   process.exit(2)
 }
 // A surface that takes no question — trending, explore — must not be refused for
-// not having one, and a search that has none must not open a session to ask it.
-const needsQuery = sourceId.endsWith(".search")
+// not having one, and a surface that needs one must not open a session to ask it.
+// Named per surface rather than inferred from the suffix: `maps.reviews` takes an
+// entity URL as its query, so the old `endsWith(".search")` rule would have let it
+// open a browser and navigate to `undefined`.
+const QUERYLESS = new Set(["youtube.trending", "tiktok.explore"])
+const needsQuery = !QUERYLESS.has(sourceId)
 const query = flag("query", "")
 const persona = {
   id: flag("persona", "record-cli"),
@@ -104,7 +119,7 @@ const outDir = resolve(
 )
 
 if (needsQuery && !query) {
-  console.error("--query is required for a search capture; a session with no question is a bill")
+  console.error(`--query is required for ${sourceId}; a session with no question is a bill`)
   process.exit(2)
 }
 

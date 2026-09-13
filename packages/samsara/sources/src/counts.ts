@@ -70,10 +70,25 @@ export function parseCount(text: string | null | undefined): number | null {
   const rest = lower.slice((found.index ?? 0) + raw.length).trimStart()
   let multiplier = 1
   for (const [word, scale] of SCALES) {
-    if (rest.startsWith(word)) {
-      multiplier = scale
-      break
+    if (!rest.startsWith(word)) continue
+    // **And a Latin scale word has to end where a word ends.**
+    //
+    // The rule above is not enough on its own, and the gap was found by a Maps
+    // review count rendered in Vietnamese: `231 bài đánh giá` starts its tail with
+    // `b`, which is this table's abbreviation for a billion, and the count came
+    // back as 231,000,000,000. A number that large is at least obvious; the same
+    // collision on `m`, `k` or `tr` would have produced something merely wrong.
+    //
+    // Restricted to Latin-script entries on purpose. Thai is written without
+    // spaces — `1.2 ล้านครั้ง` has a letter immediately after the scale word and is
+    // correct — so a general boundary rule would break the language this table was
+    // written for. Latin scripts do have word boundaries, and Vietnamese is written
+    // in one, which is exactly why it collided.
+    if (/^\p{Script=Latin}/u.test(word) && /^\p{Script=Latin}/u.test(rest.slice(word.length))) {
+      continue
     }
+    multiplier = scale
+    break
   }
 
   const digits = raw.replace(/[  ]/g, "").replace(/[.,]$/, "")

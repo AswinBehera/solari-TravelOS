@@ -2,7 +2,62 @@
 
 Phase: 1 — in progress. Phase 0 is **complete, pending the gate** (below; the gate is a human
 review and does not block buildable work).
-Last completed: **P1.4 — the TikTok adapter.** `tiktok.search` and `tiktok.explore`, registered in
+Last completed: **P1.5 — the Google Maps adapter.** `maps.search` and `maps.reviews`, registered in
+`apps/worker` alongside the YouTube and TikTok pairs. 191 tests in `@samsara/sources` (66 new),
+**0 browser minutes spent**, seam allowances **0 of 5** across 125 files.
+
+**Maps has no names, so the strategy that made the last two adapters writable blind does not
+transfer.** YouTube tags its results with renderer names and TikTok's items are at least keyed
+objects; `APP_INITIALIZATION_STATE` is anonymous nested arrays, and a tree search by key name has
+nothing to search for. This surface is read from the **DOM** instead, which moves field extraction
+inside `page.evaluate` — into the half that spends. The line that survives the move is narrower than
+"parse does the parsing": *the in-page half selects and copies strings; it does not interpret them.*
+The practical test is whether changing our mind about what a rating means costs a browser session.
+It does not — that work is still in `parse`. What a **selector** change now costs is a session, and
+saying so here is cheaper than discovering it later; it is also why `jsdom` is now a test-only
+dependency, declared per file with `/** @vitest-environment jsdom */` rather than package-wide.
+
+**Two adapters, because one would spend an unbounded amount.** "Search an area, then open each
+result" is a single billed session whose length is a function of a page nobody has loaded yet —
+invisible to the kernel's per-session meters until it ends. Split instead: `maps.search` takes an
+area or a category, `maps.reviews` takes **an entity URL as its query**, and the chaining is the
+caller's, on the P1.1 precedent that a list of areas is a job-payload argument and never a constant
+inside the engine. Second dividend: a failure at the eighth entity of ten loses one capture, not
+ten. `buildReviewsUrl` refuses any host that is not Google's — an adapter that will navigate
+anywhere on request is a proxy with our egress address on it.
+
+**The diagnostics are the design.** Three things about Maps cannot be known without paying: which
+tab is the reviews tab (localised, so matched by position), whether `data-review-id` still anchors a
+review, and whether the blob is still called `APP_INITIALIZATION_STATE`. Every capture records what
+it saw — `tabLabels`, `nodeCounts`, `stateKeys`, `observedPaths`, `strategies` — so **one** capture
+answers all three, including a capture that failed. Generalises P1.4's `observedPaths`.
+
+**Redaction by shape, not by key name — and only because nothing reads the field.** Every other
+adapter redacts a keyed tree by name; Maps' one opaque field is a *string*, so the only available
+filter is a pattern (JWTs, `AIza…` keys, `ya29.` tokens, `SAPISIDHASH`). That is a denylist, which
+this file has twice called the problem. It is acceptable here for one reason that inverts the
+trade-off: nothing parses the blob, so over-redaction costs nothing, where over-redacting TikTok's
+`signature` destroyed an author's bio.
+
+**Identity comes from the feature id, and that was an accident worth keeping.** `place` is in the
+seam's `FORBIDDEN_IN_CODE` tier and is also Google's own noun. Neither escape was acceptable — a
+`seam:allow` would burn two of five on a word that is not the engine knowing about travel, and
+assembling the string at runtime is evading your own checker. Looking for an identifier that avoided
+the word instead found the hex pair `0x…:0x…`, which is regex-extractable without understanding the
+blob and converts to `https://maps.google.com/?cid=<decimal>` with one `BigInt`. The raw Maps URL
+carries a viewport and a session-shaped `data=` segment, so it **differs between two captures of the
+same entity** — which would not have failed loudly in P1.8's URL-overlap measurement. It would have
+reported zero overlap and read like a finding.
+
+**A real bug in `counts.ts`, found by a realistic Vietnamese string.** `parseCount("231 bài đánh
+giá")` returned 231,000,000,000: `b` is a complete scale word in the table and `bài` starts with it.
+Fixed where the bug was rather than in the Maps parser — a Latin-script scale word must not be
+immediately followed by another Latin-script letter — with Thai deliberately exempt, because Thai is
+written without spaces and `1.2 ล้านครั้ง` has a letter directly after the scale word. Third session
+running in which the bug surfaced because the test string was realistic rather than convenient. See
+`casestudy_and_thinking/sessions/2026-09-13-p15-the-surface-with-no-names.md`.
+
+Before that: **P1.4 — the TikTok adapter.** `tiktok.search` and `tiktok.explore`, registered in
 `apps/worker` alongside the YouTube pair. 77 tests in `@samsara/sources`, **0 browser minutes
 spent**, seam allowances **0 of 5** across 111 files.
 
@@ -184,11 +239,15 @@ allows of five**. A third finding fell out of the live run — `Asia/Ho_Chi_Minh
 viewpoint check was reporting a false negative. Before that, **P0.7** (the seam check),
 **P0.6** (dev ergonomics) and **P0.5** (the queue and the two runtimes); all three were
 committed this session, having lived only in the working tree until now.
-NEXT: **the first live capture**, which is a decision rather than a task — one browser session per
-source, and the recorded fixtures committed to a public repo (see the top of this file). It is now
-blocking two adapters rather than one: neither `youtube.fixture.test.ts` nor `tiktok.fixture.test.ts`
-exists, and nothing in `@samsara/sources` has been executed against a real page. The recorder takes
-`--source` and is ready for all four surfaces. After it, **P1.5** (Google Maps reviews).
+NEXT: **a live Maps capture**, which is a decision rather than a task — one browser session, about a
+cent against the 4,000-minute ceiling, and the bytes committed to a public repo (see the top of this
+file). YouTube and TikTok already have theirs: both were recorded, audited by shape and checked in
+at the end of P1.4, and `fixture.test.ts` in each folder parses the real bytes through the shipped
+adapter. Maps has none, and it is the adapter where a fixture is worth most — its selectors are a
+guess in a way the other two adapters' key names are not, and the diagnostics (`tabLabels`,
+`nodeCounts`, `stateKeys`) exist to make one session answer every question about them, including a
+session that comes back refused. The recorder takes `--source=maps.search` or `--source=maps.reviews`
+and needs `--query` for both. After it, **P1.6** (Pantip).
 And **the Phase 0 gate** (see below), whose fourth question — P1.0 measured the signal stack and it
 does not match ADR-0015's ordering — is still open. Gate question 1 (`Viewpoint`'s shape) is now
 answered in code: `{country, locale, timezoneId}`, stored on the persona row and read straight

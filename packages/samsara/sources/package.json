@@ -14,5 +14,9 @@
   "dependencies": {
     "@samsara/core": "workspace:*",
     "@samsara/kernel": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^30.0.0",
+    "jsdom": "^30.0.1"
   }
 }
