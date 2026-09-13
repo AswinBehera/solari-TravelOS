@@ -143,7 +143,11 @@ try {
     [
       "",
       `  wrote     ${path}`,
-      `  size      ${(bytes / 1024).toFixed(0)} KB`,
+      // Bytes below 10 KB, kilobytes above. A real TikTok capture is ~1 MB, so
+      // anything small is the interesting case, and the first recorded fixture
+      // reported "0 KB" for 381 bytes of nothing — a number that looked like
+      // rounding rather than a finding.
+      `  size      ${bytes < 10_240 ? `${bytes} bytes` : `${(bytes / 1024).toFixed(0)} KB`}`,
       `  parsed    ${count} item(s)`,
       capture.refusedBy ? `  REFUSED   ${capture.refusedBy}` : "  refused   no",
       "",

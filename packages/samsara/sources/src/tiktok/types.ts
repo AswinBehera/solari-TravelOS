@@ -34,6 +34,17 @@ export interface TikTokPayload {
     state: boolean
     intercepted: number
   }
+  /**
+   * Rendered item tiles, counted in the page.
+   *
+   * Not read by the parser. It is here because the capture that most needs
+   * explaining is the one that refused, and `state: null, intercepted: 0` alone
+   * cannot tell "TikTok served a shell" apart from "TikTok rendered results and
+   * this adapter could not find where it put them" — a provider problem and a
+   * parser problem respectively, and a session each to tell apart by re-running.
+   * One integer, already collected, settles it.
+   */
+  tiles: number
 }
 
 /**

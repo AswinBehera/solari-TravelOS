@@ -23,26 +23,60 @@ export interface TikTokPageRead {
   tiles: number
 }
 
+/**
+ * Is this a state object, or is it the script tag the state was supposed to be in?
+ *
+ * `instanceof Node` and not a duck-typed check: the whole point is to reject a
+ * thing that answers to `typeof === "object"` and would serialise across the
+ * evaluate boundary as an unusable reference.
+ */
+function usable(value: unknown): boolean {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false
+  if (value instanceof Node) return false
+  return Object.keys(value).length > 0
+}
+
 export function readTikTokState(): TikTokPageRead {
   const globals = window as unknown as {
     __UNIVERSAL_DATA_FOR_REHYDRATION__?: unknown
     SIGI_STATE?: unknown
   }
 
-  // Three ways in, newest first. TikTok moved from `SIGI_STATE` to
+  // Two names, newest first. TikTok moved from `SIGI_STATE` to
   // `__UNIVERSAL_DATA_FOR_REHYDRATION__` and still serves the old shape to some
   // user agents, so both are read rather than one being assumed current.
-  let state: unknown = globals.__UNIVERSAL_DATA_FOR_REHYDRATION__ ?? globals.SIGI_STATE ?? null
-  if (state === null) {
-    for (const id of ["__UNIVERSAL_DATA_FOR_REHYDRATION__", "SIGI_STATE"]) {
-      const tag = document.getElementById(id)
-      if (!tag?.textContent) continue
+  //
+  // **The script tag is read before the global, and the global is checked for
+  // being a DOM node.** Both of these names are the `id` of a `<script>` tag, and
+  // HTML's named access on `window` means `window.__UNIVERSAL_DATA_FOR_REHYDRATION__`
+  // evaluates to *that script element* whenever no real property shadows it. The
+  // first version of this function read the globals first and took the first
+  // non-null answer, so it always got the element, never descended to the tag it
+  // was standing on, and returned something that was not null — which meant
+  // `capture.ts` saw `state !== null`, recorded the strategy as having worked, and
+  // declined to call it a refusal. The recorded fixture was 381 bytes containing
+  // the string `ref: <Node>`. A null would have been caught by the refusal check
+  // on the first run; an element was worse than nothing precisely because it was
+  // truthy.
+  let state: unknown = null
+  for (const id of ["__UNIVERSAL_DATA_FOR_REHYDRATION__", "SIGI_STATE"]) {
+    const tag = document.getElementById(id)
+    if (tag?.textContent) {
       try {
-        state = JSON.parse(tag.textContent)
+        const parsed: unknown = JSON.parse(tag.textContent)
+        if (usable(parsed)) {
+          state = parsed
+          break
+        }
       } catch {
-        state = null
+        // Not JSON. Fall through to the global, which may hold the live object.
       }
-      if (state !== null) break
+    }
+    const global =
+      id === "SIGI_STATE" ? globals.SIGI_STATE : globals.__UNIVERSAL_DATA_FOR_REHYDRATION__
+    if (usable(global)) {
+      state = global
+      break
     }
   }
 

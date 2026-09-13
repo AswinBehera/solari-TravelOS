@@ -19,6 +19,10 @@ import type { TikTokPageRead } from "./inpage.js"
  * would be testing my model of a DOM rather than a DOM. What *is* testable here is
  * everything around it — which URL was asked for, which responses were kept, what
  * was stripped, and what counts as a refusal.
+ *
+ * That reasoning has one hole, and the first live capture found it: it is also the
+ * reason nothing checked what `readTikTokState` *returns*. `inpage.test.ts` now
+ * covers the part of that function which depends on no page in particular.
  */
 
 function fakePage(read: Partial<TikTokPageRead>, responses: FakeResponse[] = []) {
@@ -103,6 +107,42 @@ describe("buildSearchUrl", () => {
     const url = new URL(buildExploreUrl({ locale: "th-TH" }))
     expect(url.searchParams.get("lang")).toBe("th")
     expect([...url.searchParams.keys()]).toEqual(["lang"])
+  })
+})
+
+describe("state that is not state", () => {
+  /**
+   * The live case, in one line. TikTok's state lives in a `<script>` whose `id`
+   * makes it a global of the same name, so the first version of `readTikTokState`
+   * came back holding the element. Across the evaluate boundary that serialised to
+   * the string `ref: <Node>` — not null, so the refusal below stayed quiet, the
+   * strategy was recorded as having worked, and the recorder wrote a 381-byte
+   * fixture that read as a successful harvest of nothing.
+   *
+   * `inpage.ts` no longer returns a node. This asserts the second line of defence,
+   * on this side of a serialiser nobody in this repository controls.
+   */
+  it("refuses a page whose state survived as something that is not an object", async () => {
+    const { page } = fakePage({ state: "ref: <Node>" })
+    const capture = await captureTikTok(context(page), "bánh mì", "search", { settleMs: 0 })
+
+    expect(capture.payload.state).toBeNull()
+    expect(capture.payload.strategies.state).toBe(false)
+    expect(capture.refusedBy).toMatch(/no state and no item api response/)
+  })
+
+  it("still reports the strategy honestly when an api body arrived anyway", async () => {
+    const { page } = fakePage({ state: "ref: <Node>" }, [
+      response("https://www.tiktok.com/api/search/general/?q=x", 200, {
+        data: [{ item: { id: "123", desc: "bánh mì", stats: { playCount: 5 } } }],
+      }),
+    ])
+    const capture = await captureTikTok(context(page), "bánh mì", "search", { settleMs: 0 })
+
+    expect(capture.payload.strategies.state).toBe(false)
+    expect(capture.payload.strategies.intercepted).toBe(1)
+    // Not a refusal: one strategy reading is a read.
+    expect(capture.refusedBy).toBeUndefined()
   })
 })
 

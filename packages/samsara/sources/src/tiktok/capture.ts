@@ -189,13 +189,21 @@ export async function captureTikTok(
   }
 
   const read = await page.evaluate(readTikTokState)
+  // Re-checked on this side of the evaluate boundary, and not merely `!== null`.
+  // `inpage.ts` already refuses to return a DOM node, but what arrives here has
+  // been through the provider's serialiser, and the first live capture proved what
+  // a truthy non-object costs: it silences the refusal below and writes a fixture
+  // that looks like a successful run. The check is two lines and the failure it
+  // prevents is invisible.
+  const state = isRecord(read.state) ? read.state : null
 
   const payload: TikTokPayload = {
-    state: redact(read.state, 0),
+    state: redact(state, 0),
     intercepted,
     pageTitle: read.title,
     surface,
-    strategies: { state: read.state !== null, intercepted: intercepted.length },
+    strategies: { state: state !== null, intercepted: intercepted.length },
+    tiles: read.tiles,
   }
 
   const capture: Capture<TikTokPayload> = {
@@ -206,7 +214,7 @@ export async function captureTikTok(
     payload,
   }
 
-  const refusedBy = refusal(read, intercepted.length)
+  const refusedBy = refusal({ ...read, state }, intercepted.length)
   return refusedBy ? { ...capture, refusedBy } : capture
 }
 
@@ -268,4 +276,8 @@ function redact(node: unknown, depth: number): unknown {
     out[key] = redact(value, depth + 1)
   }
   return out
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
