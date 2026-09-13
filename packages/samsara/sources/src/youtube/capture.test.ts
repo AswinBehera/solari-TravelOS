@@ -149,6 +149,29 @@ describe("captureYouTube", () => {
     expect(json).toContain("aaaaaaaaaaa")
   })
 
+  it("drops the Shorts sequence blob, which is fifteen per cent of a real capture", async () => {
+    // Twenty-five copies of one 3.6 KB opaque protobuf, one per Shorts tile, in the
+    // first real search capture. Per-request, unread, and redundant with itself.
+    // Redacted on the `responseContext` precedent — size plus nobody reads it — and
+    // asserted here rather than only in the fixture test, because the fixture test
+    // proves the *file* is clean while this proves the *adapter* cleans it.
+    const { page } = fakePage({
+      data: {
+        contents: {
+          shortsLockupViewModel: {
+            videoId: "bbbbbbbbbbb",
+            onTap: { sequenceParams: "AjkKGjBQSFVwYXNzdGhyb3VnaA" },
+          },
+        },
+      },
+    })
+    const capture = await captureYouTube(ctx(page), "q", "search")
+    const json = JSON.stringify(capture.payload.initialData)
+
+    expect(json).not.toContain("AjkKGjBQSFVwYXNzdGhyb3VnaA")
+    expect(json).toContain("bbbbbbbbbbb")
+  })
+
   it("keeps the structure the parser searches, rather than the subtree it happens to want", async () => {
     // The line between redaction and parsing. If this function ever started
     // returning only `contents.twoColumnSearchResultsRenderer`, a YouTube layout

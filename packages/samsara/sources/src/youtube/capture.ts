@@ -40,7 +40,12 @@ export interface YouTubePage {
  * of it is read by the parser, all of it would be in a public fixture, and
  * `responseContext` alone is a third of the response by size.
  */
-const REDACTED_KEYS = new Set([
+/**
+ * Exported for `fixture.test.ts`, which walks the checked-in capture and asserts
+ * that none of these names survives in it — against the *current* list rather than
+ * the one that was current when the capture was recorded.
+ */
+export const REDACTED_KEYS = new Set([
   "clickTrackingParams",
   "trackingParams",
   "loggingDirectives",
@@ -53,6 +58,18 @@ const REDACTED_KEYS = new Set([
   "adSlots",
   "playerAds",
   "serviceTrackingParams",
+  // Added after reading the first real capture. 90 KB of a 610 KB search
+  // response — fifteen per cent of the file — is twenty-five copies of one 3.6 KB
+  // opaque blob, one per Shorts tile, encoding the continuous-playback sequence
+  // for that shelf. Per-request, unread by the parser, and redundant with itself.
+  //
+  // Same precedent as `responseContext`: dropping a named key that is large and
+  // that no parser reads is redaction. Deliberately *not* joined by `params`,
+  // `playerParams` or `token`, which are the same class of opaque protobuf but are
+  // small, and by `browseId`, which is a public channel id — a denylist that grows
+  // to cover everything base64-shaped stops being a list of things that should not
+  // have been captured.
+  "sequenceParams",
 ])
 
 const MAX_DEPTH = 40

@@ -13,11 +13,11 @@ import type { YouTubePayload } from "./types.js"
  * tree tests them honestly.
  *
  * They do **not** establish that the shape is right. Only a recorded capture does
- * that, and the fixture test that will do it lives in `youtube.fixture.test.ts`,
- * which does not exist yet because recording it costs a browser session. Saying so
- * here rather than letting a green suite imply otherwise: a hand-written fixture
- * that agrees with the parser because the same person wrote both is precisely the
- * failure `adapter.ts` was split in half to prevent.
+ * that, and `fixture.test.ts` is where it now happens: one real session, checked
+ * in, parsed by the shipped adapter. Keep both. A hand-written tree that agrees
+ * with the parser because the same person wrote both is precisely the failure
+ * `adapter.ts` was split in half to prevent — and equally, the fixture is one page
+ * on one day, and says nothing about the renderer that page did not contain.
  */
 
 function capture(initialData: unknown): Capture<YouTubePayload> {
