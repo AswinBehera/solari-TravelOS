@@ -131,7 +131,14 @@ try {
   )
 
   if (!result.ok) {
-    console.error(`\n  failed (${result.error.kind}): ${result.error.message}\n`)
+    // `cause` as well as `message`, because the kind alone is not a diagnosis.
+    // A session was spent on `internal: unhandled kernel error`, whose actual
+    // content — a `ReferenceError` from the evaluated page — was sitting on the
+    // failure the whole time and was never printed. `Failure.cause` is documented
+    // as an Error's name and message only, never a stack, so it is safe here.
+    console.error(`\n  failed (${result.error.kind}): ${result.error.message}`)
+    if (result.error.cause) console.error(`  cause     ${result.error.cause}`)
+    console.error("")
     process.exit(1)
   }
 

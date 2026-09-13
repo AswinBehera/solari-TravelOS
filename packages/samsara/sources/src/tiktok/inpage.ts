@@ -23,20 +23,27 @@ export interface TikTokPageRead {
   tiles: number
 }
 
-/**
- * Is this a state object, or is it the script tag the state was supposed to be in?
- *
- * `instanceof Node` and not a duck-typed check: the whole point is to reject a
- * thing that answers to `typeof === "object"` and would serialise across the
- * evaluate boundary as an unusable reference.
- */
-function usable(value: unknown): boolean {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false
-  if (value instanceof Node) return false
-  return Object.keys(value).length > 0
-}
-
 export function readTikTokState(): TikTokPageRead {
+  /**
+   * Is this a state object, or is it the script tag the state was supposed to be in?
+   *
+   * **Declared inside the function**, which is the rule this file's header states
+   * and which I broke on the first attempt at the fix: Playwright serialises the
+   * function source and nothing else, so a call to a module-scope helper is a
+   * `ReferenceError` in the page — on a clock that is already billing. It cost a
+   * session (0.144 min) to relearn, reported as `internal: unhandled kernel error`
+   * because the underlying message never reached the operator.
+   *
+   * `instanceof Node` and not a duck-typed check: the whole point is to reject a
+   * thing that answers to `typeof === "object"` and would cross the evaluate
+   * boundary as an unusable reference.
+   */
+  const usable = (value: unknown): boolean => {
+    if (value === null || typeof value !== "object" || Array.isArray(value)) return false
+    if (value instanceof Node) return false
+    return Object.keys(value).length > 0
+  }
+
   const globals = window as unknown as {
     __UNIVERSAL_DATA_FOR_REHYDRATION__?: unknown
     SIGI_STATE?: unknown

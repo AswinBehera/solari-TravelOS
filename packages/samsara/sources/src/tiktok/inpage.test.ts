@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest"
-import { readTikTokState } from "./inpage.js"
+import { readTikTokState, type TikTokPageRead } from "./inpage.js"
 
 /**
  * A stub, and honest about being one.
@@ -16,7 +16,19 @@ import { readTikTokState } from "./inpage.js"
  * So the stub models exactly two things — named access, and `instanceof Node` —
  * and claims nothing else. What the parser does with a real page is the fixture
  * test's job.
+ *
+ * **Every case here runs the function through `toString` and `new Function`**,
+ * which is what Playwright does to it: the source crosses, the scope does not. A
+ * second session was spent discovering that the first fix called a module-scope
+ * helper, which typechecks, passes a normal import-and-call test, and throws
+ * `ReferenceError` in the page. Importing and calling directly would have gone on
+ * passing. This is the only way to assert the rule the file's header states.
  */
+
+/** Exactly what the provider does with it: keep the source, drop the scope. */
+function serialised(): () => TikTokPageRead {
+  return new Function(`return (${readTikTokState.toString()})`)() as () => TikTokPageRead
+}
 
 class FakeNode {}
 
@@ -75,13 +87,13 @@ describe("readTikTokState", () => {
     // is the tag, which is precisely the live case. The first version of this
     // function returned the element here and called it state.
     install({ tags: { __UNIVERSAL_DATA_FOR_REHYDRATION__: '{"__DEFAULT_SCOPE__":{"a":1}}' } })
-    const read = readTikTokState()
+    const read = serialised()()
     expect(read.state).toEqual({ __DEFAULT_SCOPE__: { a: 1 } })
   })
 
   it("never returns a DOM node as state, even when nothing else is there", () => {
     install({ globals: { SIGI_STATE: new FakeNode() } })
-    expect(readTikTokState().state).toBeNull()
+    expect(serialised()().state).toBeNull()
   })
 
   it("falls back to the global when the tag is not json", () => {
@@ -91,12 +103,12 @@ describe("readTikTokState", () => {
       tags: { SIGI_STATE: "window.SIGI_STATE = {}" },
       globals: { SIGI_STATE: { ItemModule: { "1": {} } } },
     })
-    expect(readTikTokState().state).toEqual({ ItemModule: { "1": {} } })
+    expect(serialised()().state).toEqual({ ItemModule: { "1": {} } })
   })
 
   it("treats an empty object as no state, because it is", () => {
     install({ tags: { SIGI_STATE: "{}" } })
-    expect(readTikTokState().state).toBeNull()
+    expect(serialised()().state).toBeNull()
   })
 
   it("prefers the newer name when both are present", () => {
@@ -106,6 +118,6 @@ describe("readTikTokState", () => {
         SIGI_STATE: '{"old":true}',
       },
     })
-    expect(readTikTokState().state).toEqual({ new: true })
+    expect(serialised()().state).toEqual({ new: true })
   })
 })
