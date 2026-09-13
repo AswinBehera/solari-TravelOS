@@ -1,8 +1,9 @@
 import { samsaraSchema } from "@samsara/db"
+import { type DatabaseLock, lockDatabase } from "@samsara/db/testing"
 import { sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
-import { afterAll, beforeEach, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest"
 import { failure } from "./result.js"
 import { PostgresJobStore } from "./stores/postgres.js"
 
@@ -51,8 +52,17 @@ if (!hasDb && !optedOut) {
 const client = hasDb ? postgres(url as string, { max: 4 }) : undefined
 const db = client ? drizzle(client, { schema: samsaraSchema }) : undefined
 
+// Held for the whole file: these suites truncate shared tables, and Turbo runs
+// the packages that do so at the same time. See `@samsara/db/testing`.
+let lock: DatabaseLock | null = null
+
+beforeAll(async () => {
+  if (hasDb) lock = await lockDatabase(url as string)
+})
+
 afterAll(async () => {
   await client?.end({ timeout: 5 })
+  await lock?.release()
 })
 
 describe.skipIf(!hasDb)("the queue, against Postgres", () => {

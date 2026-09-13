@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
@@ -13,5 +14,8 @@
   "dependencies": {
     "@samsara/core": "workspace:*",
     "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "postgres": "^3.4.9"
   }
 }
