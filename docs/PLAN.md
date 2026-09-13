@@ -495,6 +495,41 @@ Tasks:
   would be a job type that always fails. Wiring lands with the first real source.
   See `casestudy_and_thinking/sessions/2026-09-12-p12-the-split-and-the-blind-checker.md`.
 - **P1.3** Adapter: **YouTube regional trending + search** (logged-out, region param). Most stable target; proves the shape.
+  ✅ **Done, with one step deliberately not taken.** `youtube.search` and `youtube.trending` are
+  **two** adapters sharing one parser: `sourceId` is the column a stored row is grouped and
+  re-parsed by, and a search result is not the same kind of evidence as a trending slot.
+  Departures worth knowing about:
+  1. **The parser searches the tree, it does not walk a path.** Five renderer names
+     (`videoRenderer`, `gridVideoRenderer`, `compactVideoRenderer`, `playlistVideoRenderer`,
+     `reelItemRenderer`) at a depth cap of 40. Renderer names are the stable part of YouTube's
+     response; the containers around them are not. Encounter order is preserved because encounter
+     order is rank order, which P1.8's overlap measurement depends on.
+  2. **Redaction is a key-name list (11 keys), not a narrowing of the payload.** Storing only
+     `contents.twoColumnSearchResultsRenderer` would be smaller and would move parsing into the
+     half that spends — after which every layout change needs a browser session instead of a
+     parser. The split does not die in one bad decision; it dies one helpful refactor at a time.
+  3. **`counts.ts` returns `null` rather than guess.** 12 scale words across 3 languages; Thai
+     counts in powers of ten thousand; `,` is a thousands separator in one language and a decimal
+     point in another. A mis-scaled view count ranks content while looking reasonable; a missing
+     one is visibly missing. `Engagement` is nullable for exactly this.
+  4. **Zero results is not `refusedBy`.** The orchestrator has an `empty` outcome; folding empty
+     into blocked would degrade a persona's health over a typo and make a real region block
+     indistinguishable from an honest zero.
+  5. **`/// <reference lib="dom" />` is file-scoped in `inpage.ts`**, not a package-wide `lib`
+     widening as in the lab, because `@samsara/sources` may have to compile for Workers.
+  Also: `harvest.run` is now registered in `apps/worker` (7 handler tests), `FilesystemCaptureArchive`
+  lands at `@samsara/harvest/node` as an explicit stand-in with a bucket-shaped relative key so the
+  Supabase swap is a copy rather than a rewrite of every stored ref, and `apps/worker` gains
+  `record:plan` / `record` for fixture capture.
+  **Not done, needs a decision:** no live capture has been recorded, so
+  `youtube.fixture.test.ts` does not exist and no test in this package has seen YouTube. Recording
+  spends a browser session through a paid provider and writes the bytes into a **public** repo,
+  where the only protection is an 11-key denylist. `parse.test.ts` says so in its own header.
+  **Also fixed here, unrelated:** three packages truncating the same tables concurrently under
+  Turbo produced five moving `.pg.test.ts` failures. Now serialised with a Postgres advisory lock
+  (`@samsara/db/testing`) rather than `--concurrency=1`; parallel suite 9.6s vs 26.7s serial.
+  44 tests in `@samsara/sources`, **0 browser minutes spent**, seam allowances 0 of 5 across 103 files.
+  See `casestudy_and_thinking/sessions/2026-09-13-p13-the-first-real-source.md`.
 - **P1.4** Adapter: **TikTok logged-out search/discover** with stealth + the P1.0 viewpoint (Thai query, `th-TH` locale, `Asia/Bangkok`, `sg` egress — there is no `th` egress, see ADR-0015). TikTok is the surface most likely to gate on IP geolocation, so this is where the gap shows up if it shows up; report it as a gap rather than working around it. Two strategies: rendered page scrape, then intercepted XHR JSON. Record sessions for first 20 runs.
 - **P1.5** Adapter: **Google Maps reviews** for a caller-supplied list of areas; Phase 1 runs it on Thai-language areas (Ari, Charoenkrung, Talat Noi, Yaowarat), but the area list is a parameter, not a constant in the adapter. Extract review text in native script, reviewer language.
 - **P1.6** Adapter: **Pantip** (Thai forum) boards; board ids are a parameter. Plain HTML, good signal.

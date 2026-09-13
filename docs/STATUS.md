@@ -2,7 +2,44 @@
 
 Phase: 1 — in progress. Phase 0 is **complete, pending the gate** (below; the gate is a human
 review and does not block buildable work).
-Last completed: **P1.2 — `@samsara/sources` + `@samsara/harvest`.** The adapter contract and the
+Last completed: **P1.3 — the YouTube adapter.** `youtube.search` and `youtube.trending` are two
+adapters sharing one parser, `harvest.run` is wired into `apps/worker`, and 44 tests in
+`@samsara/sources` pass without a single one of them having seen YouTube. **0 browser minutes
+spent**, seam allowances still **0 of 5** across 103 files.
+
+**The one step not taken, which needs a decision.** No live capture has been recorded, so
+`youtube.fixture.test.ts` does not exist. Recording it opens a browser session through a paid
+provider — about a cent against a 4,000-minute ceiling, trivial as money and not trivial as a
+precedent — and writes the resulting bytes into a **public** repository, where the only protection
+is an 11-key redaction denylist. The recorder is built and its dry run is correct; the command is
+`pnpm --filter @dt/worker record -- --query="…" --country=sg --locale=vi-VN`. Until then
+`parse.test.ts` states in its own header that its hand-built trees test the parser's behaviour and
+do **not** establish that the shape is right.
+
+Three shapes worth carrying forward: **two adapters, one parser** (`sourceId` is what a stored row
+is grouped and re-parsed by, and a search result is not the same evidence as a trending slot);
+**the parser searches for five renderer names rather than walking a path**, because names are the
+stable part of YouTube's response and containers are not, while preserving encounter order because
+encounter order is rank order; and **redaction is a key-name list, not a narrowing of the payload**
+— storing only the results container would move parsing into the half that spends, after which
+every layout change costs a browser session instead of a parser edit.
+
+`counts.ts` returns `null` rather than guess: 12 scale words across 3 languages, Thai counting in
+powers of ten thousand, and `,` meaning a thousands separator in one language and a decimal point
+in another. A mis-scaled view count ranks content while looking entirely reasonable; a missing one
+is visibly missing.
+
+**A known hazard stopped being theoretical.** The shared test-database note below had sat unacted
+on since P1.1. Adding a third package that truncates the same four tables turned it into five
+`.pg.test.ts` failures under `pnpm check` that passed individually and were not the same five
+twice. Fixed with a Postgres advisory lock held for the length of each pg test file
+(`@samsara/db/testing`) rather than `--concurrency=1`, which would have serialised twenty-six
+tasks to resolve a conflict between three and re-introduced the bug silently on the next package
+to open a connection. Parallel suite: **9.6s green** against 26.7s for the serial workaround, four
+consecutive runs at 26/26. See
+`casestudy_and_thinking/sessions/2026-09-13-p13-the-first-real-source.md`.
+
+Before that: **P1.2 — `@samsara/sources` + `@samsara/harvest`.** The adapter contract and the
 orchestration around it. 43 new tests, **zero browser minutes spent** building either, seam
 allowances still **0 of 5** across 92 files.
 
@@ -107,15 +144,24 @@ allows of five**. A third finding fell out of the live run — `Asia/Ho_Chi_Minh
 viewpoint check was reporting a false negative. Before that, **P0.7** (the seam check),
 **P0.6** (dev ergonomics) and **P0.5** (the queue and the two runtimes); all three were
 committed this session, having lived only in the working tree until now.
-NEXT: **P1.3** — the YouTube adapter, the first real `SourceAdapter`, which also brings the
-`harvest.run` job wiring and forces the `CaptureArchive` decision (no Supabase credentials yet, so
-that choice is live). And **the Phase 0 gate** (see below), whose fourth question — P1.0 measured
-the signal stack and it does not match ADR-0015's ordering — is still open. Gate question 1
-(`Viewpoint`'s shape) is now answered in code: `{country, locale, timezoneId}`, stored on the
-persona row and read straight through by `CapturePersona`.
-Still an architect's call: `jobs.pg.test.ts`, `personas.pg.test.ts` and now `harvest.pg.test.ts`
-all TRUNCATE the same database `pnpm dev` drains. Harmless today because the dev data is
-disposable; it stops being harmless the first time it is not.
+NEXT: **the first live capture**, which is a decision rather than a task — one browser session
+and a recorded fixture committed to a public repo (see the top of this file). After it,
+`youtube.fixture.test.ts`, then **P1.4** (TikTok), which is the adapter most likely to gate on IP
+geolocation and therefore the one that tells us whether the `sg`-egress-for-`th`-viewpoint
+compromise in ADR-0015 actually holds.
+And **the Phase 0 gate** (see below), whose fourth question — P1.0 measured the signal stack and it
+does not match ADR-0015's ordering — is still open. Gate question 1 (`Viewpoint`'s shape) is now
+answered in code: `{country, locale, timezoneId}`, stored on the persona row and read straight
+through by `CapturePersona`.
+Half-resolved: `jobs.pg.test.ts`, `personas.pg.test.ts` and `harvest.pg.test.ts` no longer
+truncate *each other* — a Postgres advisory lock in `@samsara/db/testing` serialises them across
+processes. They still truncate the same database `pnpm dev` drains, which remains an architect's
+call: harmless while the dev data is disposable, and not the day it is not. The lock makes the
+suite correct; it does not make the choice of database correct.
+Also unresolved: no live capture has been recorded, so nothing in `@samsara/sources` has been
+executed against a real page. The `CaptureArchive` decision is still live (no Supabase
+credentials), and `FilesystemCaptureArchive` is an explicit stand-in that does not survive an
+Actions runner.
 Branch: main
 Known breakage: none. (The 0003/0004 gap from last session is closed — Docker was started, all six
 migrations are recorded, and `places.external_ref`/`resolved_tier` are live.)

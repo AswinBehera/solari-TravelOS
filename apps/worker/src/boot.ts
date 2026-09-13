@@ -1,4 +1,7 @@
 import { createDb } from "@dt/db"
+import { MemoryPacer } from "@samsara/harvest"
+import { FilesystemCaptureArchive } from "@samsara/harvest/node"
+import { PostgresHarvestRunStore, PostgresRawItemStore } from "@samsara/harvest/postgres"
 import { BudgetGuard, Kernel, type Logger, loadCeilings, SessionRegistry } from "@samsara/kernel"
 import { jsonLogger } from "@samsara/kernel/node"
 import {
@@ -8,7 +11,10 @@ import {
 } from "@samsara/kernel/postgres"
 import { createSolariBrowserLauncher, solariCredentials } from "@samsara/kernel/solari"
 import { PostgresPersonaStore } from "@samsara/personas/postgres"
+import type { SourceAdapter } from "@samsara/sources"
+import { youtubeSearch, youtubeTrending } from "@samsara/sources"
 import { HandlerRegistry, noopHandler } from "./handlers.js"
+import { createHarvestHandler } from "./harvest.js"
 import { createPackRegistry } from "./packs.js"
 import { createKeepaliveHandler } from "./personas.js"
 
@@ -64,11 +70,39 @@ export function boot(env: NodeJS.ProcessEnv = process.env): Boot {
   // means a keyless runner claims the job and fails it with `config` rather than
   // quietly running a keepalive that saves nothing — the silent failure
   // `ProfileStore` exists to warn about.
+  const personas = new PostgresPersonaStore(database.db)
   handlers.register(
     "persona.keepalive",
     createKeepaliveHandler({
-      store: new PostgresPersonaStore(database.db),
+      store: personas,
       ...(launcher?.profiles ? { profiles: launcher.profiles } : {}),
+    }),
+  )
+
+  // Registered by name, not discovered. Every entry here is a source this
+  // deployment can be told to spend money on, so the list is a line somebody wrote
+  // rather than whatever happened to be importable.
+  const sources = new Map<string, SourceAdapter<unknown>>([
+    [youtubeSearch.id, youtubeSearch as SourceAdapter<unknown>],
+    [youtubeTrending.id, youtubeTrending as SourceAdapter<unknown>],
+  ])
+
+  handlers.register(
+    "harvest.run",
+    createHarvestHandler({
+      sources,
+      personas,
+      runs: new PostgresHarvestRunStore(database.db),
+      items: new PostgresRawItemStore(database.db),
+      // Local disk, and a stand-in — see the class header. Section 8 puts captures
+      // in Supabase Storage; there are no credentials for it yet, and `runHarvest`
+      // treats a failed archive as fatal, so "no archive" would mean "no harvest".
+      // The ref shape matches a bucket key so the swap stays a copy.
+      archive: new FilesystemCaptureArchive(env.CAPTURE_ARCHIVE_DIR ?? ".captures"),
+      // One source, one process, one request every five seconds. Honest about its
+      // limits: this cannot span a scheduled runner's exit, and the cross-process
+      // answer is `jobs.run_after`, not a shared limiter.
+      pacer: new MemoryPacer(),
     }),
   )
 
