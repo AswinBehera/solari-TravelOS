@@ -39,6 +39,7 @@ function capture(payload: Partial<TikTokPayload>): Capture<TikTokPayload> {
       surface: "search",
       strategies: { state: false, intercepted: 0 },
       tiles: 0,
+      observedPaths: [],
       ...payload,
     },
   }

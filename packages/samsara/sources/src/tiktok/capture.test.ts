@@ -110,6 +110,94 @@ describe("buildSearchUrl", () => {
   })
 })
 
+describe("what the redaction list learned from a real page", () => {
+  /**
+   * These keys are not from TikTok's documentation — there is none. They are from
+   * reading a 232 KB capture that the first list passed clean, which is the step
+   * the recorder's closing warning exists to force.
+   */
+  it("strips the session identity that the first list missed", async () => {
+    const state = {
+      __DEFAULT_SCOPE__: {
+        "webapp.app-context": {
+          wid: "7684911565829113361",
+          encryptedWebid: "1|2uJk3ZqTAvkjw4xDRi024YK53oWO5uKzolyAUEVcuJQ|1789282909|1142bbef",
+          webIdCreatedTime: "1789282909",
+          nonce: "if6Z1KmP25w84XQ4lCPKJ",
+          requestId: "65884612789282909590",
+          userAgent: "Mozilla/5.0 (X11; Linux x86_64) Chrome/151.0.0.0",
+          language: "vi-VN",
+          region: "SG",
+        },
+        "webapp.biz-context": { hashedIP: "24baa46e", apiKeys: { firebase: "AIzaSyDHGq" } },
+        "webapp.i18n-translation": { Webapp: { some_key: "some string" } },
+      },
+    }
+    const { page } = fakePage({ state })
+    const capture = await captureTikTok(context(page), "bánh mì", "search", NO_SETTLE)
+    const json = JSON.stringify(capture)
+
+    for (const secret of [
+      "7684911565829113361",
+      "2uJk3ZqTAvkjw4xDRi024YK53oWO5uKzolyAUEVcuJQ",
+      "1789282909",
+      "if6Z1KmP25w84XQ4lCPKJ",
+      "65884612789282909590",
+      "24baa46e",
+      "AIzaSyDHGq",
+      "Chrome/151.0.0.0",
+    ]) {
+      expect(json).not.toContain(secret)
+    }
+    // The i18n table is 303 KB of the 351 KB and no parser reads it.
+    expect(json).not.toContain("some string")
+  })
+
+  it("keeps the viewpoint, which is the whole measurement", async () => {
+    // `language` and `region` are how a capture proves the persona reached the
+    // source. Redacting the context wholesale would have taken them with it.
+    const state = {
+      __DEFAULT_SCOPE__: { "webapp.app-context": { language: "vi-VN", region: "SG", wid: "1" } },
+    }
+    const { page } = fakePage({ state })
+    const capture = await captureTikTok(context(page), "bánh mì", "search", NO_SETTLE)
+    const json = JSON.stringify(capture)
+
+    expect(json).toContain("vi-VN")
+    expect(json).toContain("SG")
+  })
+})
+
+describe("observedPaths", () => {
+  it("lists every path the page asked for, not only the ones that were kept", async () => {
+    const { page } = fakePage({}, [
+      response("https://www.tiktok.com/api/search/general/?q=x&msToken=secret", 200, { data: [] }),
+      response("https://www.tiktok.com/api/user/detail/?secUid=abc", 200, {}),
+      response("https://v16.tiktokcdn.com/video/1.mp4", 200, {}),
+    ])
+    const capture = await captureTikTok(context(page), "bánh mì", "search", NO_SETTLE)
+
+    expect(capture.payload.observedPaths).toEqual([
+      "/api/search/general/",
+      "/api/user/detail/",
+      "/video/1.mp4",
+    ])
+    // The distinction the list exists for: three requests seen, one kept.
+    expect(capture.payload.strategies.intercepted).toBe(1)
+  })
+
+  it("keeps no query strings, which is where the device ids are", async () => {
+    const { page } = fakePage({}, [
+      response("https://www.tiktok.com/api/user/detail/?msToken=secret&odinId=123", 200, {}),
+    ])
+    const capture = await captureTikTok(context(page), "x", "search", NO_SETTLE)
+
+    expect(capture.payload.observedPaths).toEqual(["/api/user/detail/"])
+    expect(JSON.stringify(capture)).not.toContain("msToken")
+    expect(JSON.stringify(capture)).not.toContain("odinId")
+  })
+})
+
 describe("state that is not state", () => {
   /**
    * The live case, in one line. TikTok's state lives in a `<script>` whose `id`

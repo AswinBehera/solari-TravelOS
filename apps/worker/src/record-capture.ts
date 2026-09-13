@@ -44,14 +44,37 @@ const dryRun = args.includes("--dry-run")
  * a recorder that addresses sources differently from the queue is a recorder that
  * can produce a fixture for a source the queue cannot run.
  */
-const SOURCES: Record<string, () => SourceAdapter<unknown>> = {
+const SOURCES: Record<string, (settleMs?: number) => SourceAdapter<unknown>> = {
   "youtube.search": () => createYouTubeAdapter("search") as SourceAdapter<unknown>,
   "youtube.trending": () => createYouTubeAdapter("trending") as SourceAdapter<unknown>,
-  "tiktok.search": () => createTikTokAdapter("search") as SourceAdapter<unknown>,
-  "tiktok.explore": () => createTikTokAdapter("explore") as SourceAdapter<unknown>,
+  "tiktok.search": (settleMs) =>
+    createTikTokAdapter(
+      "search",
+      settleMs === undefined ? {} : { settleMs },
+    ) as SourceAdapter<unknown>,
+  "tiktok.explore": (settleMs) =>
+    createTikTokAdapter(
+      "explore",
+      settleMs === undefined ? {} : { settleMs },
+    ) as SourceAdapter<unknown>,
 }
 
 const sourceId = flag("source", "youtube.search")
+/**
+ * How long to wait after `domcontentloaded` before reading the page.
+ *
+ * A flag rather than an edit because the number is a question about a website
+ * and the answer changes without warning: TikTok's search surface renders its
+ * results entirely client-side, and the only way to find out how long that takes
+ * from a given egress is to try. Each try is a billed session, so trying should
+ * not also be a commit.
+ */
+const settleFlag = flag("settle", "")
+const settleMs = settleFlag === "" ? undefined : Number(settleFlag)
+if (settleMs !== undefined && (!Number.isFinite(settleMs) || settleMs < 0)) {
+  console.error(`--settle must be a non-negative number of milliseconds, got ${settleFlag}`)
+  process.exit(2)
+}
 const make = SOURCES[sourceId]
 if (!make) {
   console.error(`unknown --source=${sourceId}; one of ${Object.keys(SOURCES).join(", ")}`)
@@ -85,7 +108,7 @@ if (needsQuery && !query) {
   process.exit(2)
 }
 
-const adapter = make()
+const adapter = make(settleMs)
 
 console.log(
   [
@@ -157,6 +180,11 @@ try {
       `  size      ${bytes < 10_240 ? `${bytes} bytes` : `${(bytes / 1024).toFixed(0)} KB`}`,
       `  parsed    ${count} item(s)`,
       capture.refusedBy ? `  REFUSED   ${capture.refusedBy}` : "  refused   no",
+      // Whatever diagnostics the payload carries, printed rather than left for
+      // somebody to go and read the JSON for. A capture that parses to zero items
+      // is the case that most needs explaining and the one where the terminal
+      // currently says least.
+      ...diagnostics(capture.payload),
       "",
       "  Read the file before committing it. It is going into a public repository,",
       "  and the redaction in capture.ts is a list of key names, not a guarantee.",
@@ -165,4 +193,31 @@ try {
   )
 } finally {
   await app.close()
+}
+
+/**
+ * The parts of a payload that explain a disappointing capture.
+ *
+ * Read defensively and by name: this script is generic over every adapter's
+ * payload type, and printing these is worth more than making the recorder know
+ * which adapter it is running.
+ */
+function diagnostics(payload: unknown): string[] {
+  if (payload === null || typeof payload !== "object") return []
+  const p = payload as {
+    tiles?: unknown
+    observedPaths?: unknown
+    strategies?: { state?: unknown; intercepted?: unknown }
+  }
+  const lines: string[] = []
+  if (typeof p.tiles === "number") lines.push(`  tiles     ${p.tiles} rendered`)
+  if (p.strategies) {
+    lines.push(`  state     ${p.strategies.state ? "read" : "not found"}`)
+    lines.push(`  api       ${String(p.strategies.intercepted ?? 0)} item response(s)`)
+  }
+  if (Array.isArray(p.observedPaths) && p.observedPaths.length > 0) {
+    lines.push(`  requests  ${p.observedPaths.length} distinct path(s):`)
+    for (const path of p.observedPaths as string[]) lines.push(`              ${path}`)
+  }
+  return lines
 }

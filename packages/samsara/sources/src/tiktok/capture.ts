@@ -86,6 +86,39 @@ const REDACTED_KEYS = new Set([
   "cookieLGWInfo",
   "installId",
   "csrfToken",
+  // Added after reading the first real capture, which is what the recorder's
+  // closing warning tells you to do and why it says the list is not a guarantee.
+  // Every one of these was in `webapp.app-context` or `webapp.biz-context` of a
+  // 232 KB search capture, and none of them was on the list written from the
+  // documentation:
+  //
+  //   wid                7684911565829113361
+  //   encryptedWebid     1|2uJk3ZqTAvkjw4xDRi024YK53oWO5uKzolyAUEVcuJQ|…
+  //   webIdCreatedTime   1789282909
+  //   nonce              if6Z1KmP25w84XQ4lCPKJ
+  //   requestId          65884612789282909590
+  //   hashedIP           24baa46e
+  //   userAgent          Mozilla/5.0 (X11; Linux x86_64) … Chrome/151.0.0.0
+  //   apiKeys            { firebase: "AIzaSy…" }
+  //
+  // `hashedIP` is a hash of the egress address this project rented. `userAgent` is
+  // the provider's exact browser fingerprint, which is a thing a source would like
+  // to know about us and not a thing to publish. `apiKeys` is TikTok's own vendor
+  // key; it is served to every visitor and is still not ours to republish.
+  "wid",
+  "encryptedWebid",
+  "webIdCreatedTime",
+  "nonce",
+  "requestId",
+  "hashedIP",
+  "userAgent",
+  "apiKeys",
+  // Not identity — 303 KB of the 351 KB capture was this one key, a complete UI
+  // string table in the persona's language. The `responseContext` precedent from
+  // the YouTube adapter applies exactly: dropping a named key that is large and
+  // that no parser reads is redaction, not narrowing, and the difference is
+  // whether a future layout change needs a new parser or a new session.
+  "webapp.i18n-translation",
 ])
 
 // Two near-misses worth recording, because both would have typechecked, passed
@@ -120,6 +153,9 @@ export interface TikTokCaptureOptions {
 
 export const DEFAULT_SETTLE_MS = 3_000
 
+/** See `observed`. Enough to show the shape of a page's traffic, not its volume. */
+const MAX_OBSERVED_PATHS = 120
+
 export function buildSearchUrl(query: string, persona: { locale: string }): string {
   const url = new URL("https://www.tiktok.com/search")
   url.searchParams.set("q", query)
@@ -153,9 +189,21 @@ export async function captureTikTok(
 
   const intercepted: InterceptedBody[] = []
   const pending: Promise<void>[] = []
+  // Every path the page asked for, whether or not it was one we wanted.
+  //
+  // `intercepted: 0` on its own cannot tell "the page made no API calls" apart
+  // from "the page made API calls to endpoints not on the list", and those are a
+  // dead session and a stale constant respectively. The first live capture of the
+  // search surface came back with a rendered shell, zero tiles and zero
+  // interceptions, and the question it could not answer was that one. Paths only —
+  // `pathOf` drops the query string, which carries device and session ids.
+  const observed = new Set<string>()
 
   const onResponse = (response: TikTokResponse) => {
     const path = pathOf(response.url())
+    // Capped: a media-heavy page can issue hundreds of requests, and the point of
+    // this list is to be read by a person.
+    if (observed.size < MAX_OBSERVED_PATHS) observed.add(path)
     if (!ITEM_ENDPOINTS.some((endpoint) => path.includes(endpoint))) return
     if (response.status() !== 200) return
     // Collected into a promise list rather than awaited here: this handler is
@@ -204,6 +252,7 @@ export async function captureTikTok(
     surface,
     strategies: { state: state !== null, intercepted: intercepted.length },
     tiles: read.tiles,
+    observedPaths: [...observed].sort(),
   }
 
   const capture: Capture<TikTokPayload> = {

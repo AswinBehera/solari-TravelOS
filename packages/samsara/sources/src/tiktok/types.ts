@@ -45,6 +45,17 @@ export interface TikTokPayload {
    * One integer, already collected, settles it.
    */
   tiles: number
+  /**
+   * Every response path the page requested, deduplicated and sorted. Paths only:
+   * a TikTok API query string carries device and session ids.
+   *
+   * Also not read by the parser, and here for the same reason as `tiles`.
+   * `strategies.intercepted: 0` cannot separate "the page made no API calls" from
+   * "the page called endpoints that are not in `ITEM_ENDPOINTS`" — a dead session
+   * and a stale constant, which want opposite responses. The list settles it
+   * without another session.
+   */
+  observedPaths: readonly string[]
 }
 
 /**
